@@ -1,0 +1,126 @@
+<template>
+  <div class="search-wrapper">
+    <el-autocomplete
+      v-model="searchKeyword"
+      :fetch-suggestions="querySearch"
+      placeholder="搜索课程、听书..."
+      :prefix-icon="Search"
+      clearable
+      :debounce="300"
+      :trigger-on-focus="false"
+      :hide-loading="false"
+      @select="handleSelect"
+      @keyup.enter="handleEnter"
+      class="search-autocomplete"
+    />
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Search } from '@element-plus/icons-vue'
+// @ts-ignore
+import { SearchCourse } from '../../wailsjs/go/backend/App'
+
+const router = useRouter()
+
+const searchKeyword = ref('')
+
+// 使用 SearchCourse API 进行搜索
+const querySearch = async (queryString: string, cb: (results: any[]) => void) => {
+  if (!queryString) {
+    cb([])
+    return
+  }
+  
+  try {
+    // 调用真实的搜索API
+    const result = await SearchCourse(queryString, 1, 20)
+    if (result && result.list && result.list.length > 0) {
+      const results = result.list.map((item: any) => ({
+        value: item.title,
+        id: item.id || item.enid,
+        enid: item.enid,
+        title: item.title,
+        author: item.author,
+        icon: item.icon
+      }))
+      cb(results)
+    } else {
+      cb([])
+    }
+  } catch (error) {
+    console.error('搜索失败:', error)
+    cb([])
+  }
+}
+
+// 处理选择
+const handleSelect = (item: any) => {
+  const id = item.enid || item.id
+  if (id) {
+    router.push({
+      path: '/course',
+      query: { id: id.toString() }
+    })
+  }
+  searchKeyword.value = ''
+}
+
+// 处理回车
+const handleEnter = () => {
+  if (searchKeyword.value.trim()) {
+    router.push({
+      path: '/course',
+      query: { keyword: searchKeyword.value.trim() }
+    })
+  }
+}
+</script>
+
+<style scoped>
+.search-wrapper {
+  width: 280px;
+  margin-right: 16px;
+}
+
+.search-autocomplete {
+  width: 100%;
+}
+
+.search-autocomplete :deep(.el-input__wrapper) {
+  border-radius: 20px;
+  background-color: var(--bg-secondary);
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+}
+
+.search-autocomplete :deep(.el-input__wrapper:hover) {
+  border-color: var(--accent-color);
+}
+
+.search-autocomplete :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.1);
+}
+
+.search-autocomplete :deep(.el-autocomplete-suggestion) {
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+}
+
+.search-autocomplete :deep(.el-autocomplete-suggestion li) {
+  color: var(--text-primary) !important;
+  padding: 10px 15px !important;
+}
+
+.search-autocomplete :deep(.el-autocomplete-suggestion li:hover) {
+  background-color: var(--card-hover-bg) !important;
+}
+
+.search-autocomplete :deep(.el-autocomplete-suggestion__list) {
+  padding: 5px 0 !important;
+}
+</style>
