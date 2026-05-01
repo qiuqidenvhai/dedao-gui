@@ -1,3 +1,44 @@
+export namespace app {
+	
+	export class OdobItem {
+	    ID: number;
+	    Enid: string;
+	    Title: string;
+	    AudioDetail?: services.Audio;
+	
+	    static createFrom(source: any = {}) {
+	        return new OdobItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.Enid = source["Enid"];
+	        this.Title = source["Title"];
+	        this.AudioDetail = this.convertValues(source["AudioDetail"], services.Audio);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace backend {
 	
 	export class BatchArticleDownload {
@@ -2180,11 +2221,11 @@ export namespace services {
 	        this.view_count = source["view_count"];
 	    }
 	}
-	export class Switch {
+	export class CommentSwitch {
 	    img_origin: boolean;
 	
 	    static createFrom(source: any = {}) {
-	        return new Switch(source);
+	        return new CommentSwitch(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -2441,7 +2482,7 @@ export namespace services {
 	    source_type: number;
 	    state: number;
 	    style_note_line: string;
-	    switch: Switch;
+	    switch: CommentSwitch;
 	    tags: any[];
 	    uid: number;
 	    uid_hazy: string;
@@ -2520,7 +2561,7 @@ export namespace services {
 	        this.source_type = source["source_type"];
 	        this.state = source["state"];
 	        this.style_note_line = source["style_note_line"];
-	        this.switch = this.convertValues(source["switch"], Switch);
+	        this.switch = this.convertValues(source["switch"], CommentSwitch);
 	        this.tags = source["tags"];
 	        this.uid = source["uid"];
 	        this.uid_hazy = source["uid_hazy"];
@@ -2552,6 +2593,7 @@ export namespace services {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class GroupBook {
@@ -5113,7 +5155,6 @@ export namespace services {
 		    return a;
 		}
 	}
-	
 	export class TopicIntro {
 	    notes_topic_id: string;
 	    topic_id_hazy: string;

@@ -24,6 +24,11 @@ func (a *App) AudioDetailAlias(aliasID string) (detail *services.Audio, err erro
 	return
 }
 
+func (a *App) BatchOdobDownload(items []app.OdobItem, downloadType int) (err error) {
+	err = app.BatchOdobDownload(a.Ctx, items, downloadType)
+	return
+}
+
 func (a *App) OdobShelfAdd(enids []string) (resp *services.EbookShelfAddResp, err error) {
 	resp, err = app.OdobShelfAdd(enids)
 	if err != nil {

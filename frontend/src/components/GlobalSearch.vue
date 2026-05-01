@@ -3,12 +3,13 @@
     <el-autocomplete
       v-model="searchKeyword"
       :fetch-suggestions="querySearch"
-      placeholder="搜索课程、听书..."
+      placeholder="搜索课程、电子书、听书..."
       :prefix-icon="Search"
       clearable
       :debounce="300"
-      :trigger-on-focus="true"
+      :trigger-on-focus="false"
       :hide-loading="false"
+      :loading="searchLoading"
       @select="handleSelect"
       @keyup.enter="handleEnter"
       class="search-autocomplete"
@@ -21,12 +22,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 // @ts-ignore
-import { SearchHot } from '../../wailsjs/go/backend/App'
+import { SearchHot, SearchAll } from '../../wailsjs/go/backend/App'
 
 const router = useRouter()
 
 const searchKeyword = ref('')
 const hotSearchData = ref<any[]>([])
+const searchLoading = ref(false)
 
 // 加载热搜词
 onMounted(async () => {
@@ -64,38 +66,96 @@ onMounted(async () => {
   }
 })
 
-// 搜索建议
-const querySearch = (queryString: string, cb: (results: any[]) => void) => {
-  if (!queryString) {
+// 搜索建议 - 调用统一的搜索API
+const querySearch = async (queryString: string, cb: (results: any[]) => void) => {
+  if (!queryString || queryString.trim().length === 0) {
     // 没有输入时显示热搜词
     cb(hotSearchData.value.slice(0, 10))
     return
   }
   
-  // 过滤热搜词
-  const filtered = hotSearchData.value.filter(item => {
-    const title = (item.title || '').toLowerCase()
-    const searchKey = (item.searchKey || '').toLowerCase()
-    const query = queryString.toLowerCase()
-    return title.includes(query) || searchKey.includes(query)
-  })
-  
-  cb(filtered.slice(0, 20))
+  searchLoading.value = true
+  try {
+    // 调用统一的搜索API
+    const result = await SearchAll(queryString.trim(), 1, 20)
+    if (result && result.list && result.list.length > 0) {
+      const searchResults = result.list.map((item: any) => {
+        // 根据类型决定跳转路径
+        let path = '/bought/course'
+        let typeName = '课程'
+        
+        // 判断内容类型 - 根据type字段或数据特征判断
+        const itemType = item.type || item.product_type || 0
+        
+        // 常见的类型判断
+        // 1: 课程, 2: 电子书, 3: 听书, 4: 视频等
+        if (itemType === 2 || item.type_name?.includes('电子书') || item.type_name?.includes('ebook')) {
+          path = '/bought/ebook'
+          typeName = '电子书'
+        } else if (itemType === 3 || item.type_name?.includes('听书') || item.type_name?.includes('odob')) {
+          path = '/bought/odob'
+          typeName = '听书'
+        } else if (itemType === 4 || item.type_name?.includes('视频')) {
+          path = '/bought/video'
+          typeName = '视频'
+        }
+        
+        return {
+          value: item.title || item.name,
+          title: item.title || item.name,
+          enid: item.enid,
+          icon: item.icon,
+          type: itemType,
+          typeName: typeName,
+          path: path,
+          intro: item.intro || item.description || ''
+        }
+      })
+      cb(searchResults)
+    } else {
+      // 没有搜索结果时过滤热搜词
+      const filtered = hotSearchData.value.filter(item => {
+        const title = (item.title || '').toLowerCase()
+        const searchKey = (item.searchKey || '').toLowerCase()
+        const query = queryString.toLowerCase()
+        return title.includes(query) || searchKey.includes(query)
+      })
+      cb(filtered.slice(0, 10))
+    }
+  } catch (error) {
+    console.error('搜索失败:', error)
+    // 搜索失败时过滤热搜词
+    const filtered = hotSearchData.value.filter(item => {
+      const title = (item.title || '').toLowerCase()
+      const searchKey = (item.searchKey || '').toLowerCase()
+      const query = queryString.toLowerCase()
+      return title.includes(query) || searchKey.includes(query)
+    })
+    cb(filtered.slice(0, 10))
+  } finally {
+    searchLoading.value = false
+  }
 }
 
-// 处理选择
+// 处理选择 - 根据类型跳转到对应页面
 const handleSelect = (item: any) => {
-  const searchKey = item.searchKey || item.value || item.title
-  if (searchKey) {
+  // 如果是热搜词（没有path字段），跳转到课程搜索页面
+  if (!item.path) {
     router.push({
       path: '/bought/course',
-      query: { keyword: searchKey }
+      query: { keyword: item.searchKey || item.title }
+    })
+  } else {
+    // 根据搜索结果的类型跳转到对应页面
+    router.push({
+      path: item.path,
+      query: { keyword: item.title }
     })
   }
   searchKeyword.value = ''
 }
 
-// 处理回车
+// 处理回车 - 跳转到课程搜索页面（带回填关键词）
 const handleEnter = () => {
   if (searchKeyword.value.trim()) {
     router.push({

@@ -34,6 +34,10 @@ export function BatchEbookDownload(arg1, arg2) {
   return window['go']['backend']['App']['BatchEbookDownload'](arg1, arg2);
 }
 
+export function BatchOdobDownload(arg1, arg2) {
+  return window['go']['backend']['App']['BatchOdobDownload'](arg1, arg2);
+}
+
 export function ChannelHomepage(arg1) {
   return window['go']['backend']['App']['ChannelHomepage'](arg1);
 }
@@ -160,6 +164,10 @@ export function OutsideDetail(arg1) {
 
 export function SearchCourse(arg1, arg2, arg3) {
   return window['go']['backend']['App']['SearchCourse'](arg1, arg2, arg3);
+}
+
+export function SearchAll(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['SearchAll'](arg1, arg2, arg3);
 }
 
 export function SearchHot() {

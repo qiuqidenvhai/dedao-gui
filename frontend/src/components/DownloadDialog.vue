@@ -14,6 +14,7 @@
                     选择导出格式
                     <span v-if="isBatchMode" class="batch-info">(批量下载 {{ batchCount }} 个)</span>
                 </div>
+
                 <div class="format-options">
                     <div 
                         v-for="item in props.downloadTypeOptions" 
@@ -25,15 +26,19 @@
                         <span class="format-text">{{ item.label }}</span>
                         <el-icon v-if="downloadType === item.value" class="selected-icon"><Check /></el-icon>
                     </div>
+
                 </div>
             </div>
+
 
 
             <div v-if="percentage > 0" class="download-status">
                 <div class="status-header">
                     <span class="status-text">{{ content }}</span>
                     <span class="status-percent">{{ percentage }}%</span>
+
                 </div>
+
 
                 <el-progress 
                     :percentage="percentage"
@@ -46,6 +51,7 @@
         </div>
 
 
+
         <template #footer>
             <div class="dialog-footer">
                 <el-button @click="closeDialog" :disabled="isDownloading">取消</el-button>
@@ -53,17 +59,21 @@
                     {{ isDownloading ? '下载中...' : '开始下载' }}
                 </el-button>
 
+
             </div>
+
 
         </template>
     </el-dialog>
 
+
 </template>
+
 
 
 <script lang="ts" setup>
 import {onMounted, ref, computed, PropType} from "vue";
-import {EbookDownload, CourseDownload, OdobDownload, BatchCourseDownload, BatchEbookDownload} from "../../wailsjs/go/backend/App";
+import {EbookDownload, CourseDownload, OdobDownload, BatchCourseDownload, BatchEbookDownload, BatchOdobDownload} from "../../wailsjs/go/backend/App";
 import {ElMessage} from "element-plus";
 import { EventsOn, EventsOff} from "../../wailsjs/runtime/runtime";
 import { Check } from '@element-plus/icons-vue'
@@ -96,6 +106,7 @@ const props = defineProps({
         default:0,
     },
     dialogVisible: {
+
         type: Boolean,
         default: false,
     },
@@ -105,6 +116,7 @@ const props = defineProps({
         default:() => []
     },
     downloadData: {
+
         type: [Object, Array],
         default: () => ({})
     }
@@ -113,6 +125,7 @@ const emits = defineEmits(["close"]);
 
 // 判断是否为批量下载模式
 const isBatchMode = computed(() => {
+
     return Array.isArray(props.downloadData) && props.downloadData.length > 0
 })
 
@@ -132,21 +145,25 @@ const openDialog = () => {
     dialogVisible.value = props.dialogVisible
     // Set default download type to the first option if available
     if (props.downloadTypeOptions && props.downloadTypeOptions.length > 0) {
+
         downloadType.value = props.downloadTypeOptions[0].value
     }
 }
 
 
+
 const closeDialog = () => {
     if (isDownloading.value) {
+
         return 
     }
-    EventsOff("courseDownload", "ebookDownload", "odobDownload")
+    EventsOff("courseDownload", "ebookDownload", "odobDownload", "batchOdobDownload")
     percentage.value = 0
     content.value = ''
     isDownloading.value = false
     emits("close")
 }
+
 
 
 const download = async () => {
@@ -174,6 +191,41 @@ const download = async () => {
                 }))
                 
                 await BatchEbookDownload(ebooks, downloadType.value)
+                
+                ElMessage({
+                    message: '已添加到下载队列，请稍候查看下载进度',
+                    type: 'success'
+                })
+                
+                isDownloading.value = false
+                closeDialog()
+                return
+            } else if (props.prodType === 3) {
+                // 听书批量下载
+                EventsOn("batchOdobDownload", data => {
+                    if (data) {
+                        percentage.value = data.pct
+                        content.value = data.value + ' 下载中...'
+                    }
+                })
+                
+                const odobs = props.downloadData.map((item: any) => ({
+                    id: item.id,
+                    enid: item.enid,
+                    title: item.title,
+                    audio_detail: item.audio_detail
+                }))
+                
+                await BatchOdobDownload(odobs, downloadType.value)
+                
+                ElMessage({
+                    message: '已添加到下载队列，请稍候查看下载进度',
+                    type: 'success'
+                })
+                
+                isDownloading.value = false
+                closeDialog()
+                return
             } else {
                 // 课程批量下载
                 EventsOn("courseDownload", data => {
@@ -191,16 +243,16 @@ const download = async () => {
                 }))
                 
                 await BatchCourseDownload(articles, downloadType.value)
+                
+                ElMessage({
+                    message: '已添加到下载队列，请稍候查看下载进度',
+                    type: 'success'
+                })
+                
+                isDownloading.value = false
+                closeDialog()
+                return
             }
-            
-            ElMessage({
-                message: '已添加到下载队列，请稍候查看下载进度',
-                type: 'success'
-            })
-            
-            isDownloading.value = false
-            closeDialog()
-            return
         }
         
         // 单个下载模式
@@ -247,15 +299,18 @@ const download = async () => {
 </script>
 
 
+
 <style scoped>
 .download-container {
     padding: 10px 20px;
 }
 
 
+
 .format-selector {
     margin-bottom: 24px;
 }
+
 
 
 .section-label {
@@ -265,6 +320,7 @@ const download = async () => {
     font-weight: 500;
 }
 
+
 .batch-info {
     color: var(--accent-color, #ff6b00);
     font-weight: normal;
@@ -272,11 +328,13 @@ const download = async () => {
 }
 
 
+
 .format-options {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
 }
+
 
 
 .format-option {
@@ -295,11 +353,13 @@ const download = async () => {
 }
 
 
+
 .format-option:hover {
     border-color: var(--primary-color, #409eff);
     color: var(--primary-color, #409eff);
     background-color: var(--primary-color-light-9, #ecf5ff);
 }
+
 
 
 .format-option.active {
@@ -310,12 +370,14 @@ const download = async () => {
 }
 
 
+
 .selected-icon {
     position: absolute;
     right: 4px;
     top: 4px;
     font-size: 12px;
 }
+
 
 
 .download-status {
@@ -327,12 +389,14 @@ const download = async () => {
 }
 
 
+
 .status-header {
     display: flex;
     justify-content: space-between;
     margin-bottom: 8px;
     font-size: 13px;
 }
+
 
 
 .status-text {
@@ -344,10 +408,12 @@ const download = async () => {
 }
 
 
+
 .status-percent {
     color: var(--primary-color, #409eff);
     font-weight: 600;
 }
+
 
 
 .dialog-footer {

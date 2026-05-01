@@ -14,6 +14,8 @@ func (s *Service) reqGetLoginAccessToken(csrfToken string) (string, error) {
 	resp, err := s.client.R().
 		SetHeader("Accept", "application/json, text/plain, */*").
 		SetHeaderVerbatim("Xi-Csrf-Token", csrfToken).
+		SetHeaderVerbatim("Referer", "https://www.dedao.cn/").
+		SetHeaderVerbatim("Origin", "https://www.dedao.cn").
 		Post("/loginapi/getAccessToken")
 	if err != nil {
 		fmt.Printf("%#v\n", err.Error())
@@ -28,6 +30,8 @@ func (s *Service) reqGetLoginAccessToken(csrfToken string) (string, error) {
 func (s *Service) reqGetQrcode(token string) (qr *QrCodeResp, err error) {
 	_, err = s.client.R().
 		SetHeaderVerbatim("X-Oauth-Access-Token", token).
+		SetHeaderVerbatim("Referer", "https://www.dedao.cn/").
+		SetHeaderVerbatim("Origin", "https://www.dedao.cn").
 		SetResult(&qr).
 		Get("/oauth/api/embedded/qrcode")
 	if err != nil {
@@ -43,6 +47,8 @@ func (s *Service) reqGetQrcode(token string) (qr *QrCodeResp, err error) {
 func (s *Service) reqCheckLogin(token, qrCode string) (check *CheckLoginResp, cookie string, err error) {
 	resp, err := s.client.R().
 		SetHeaderVerbatim("X-Oauth-Access-Token", token).
+		SetHeaderVerbatim("Referer", "https://www.dedao.cn/").
+		SetHeaderVerbatim("Origin", "https://www.dedao.cn").
 		SetBody(map[string]interface{}{
 			"keepLogin": true,
 			"pname":     "mobilesms",
@@ -69,8 +75,7 @@ func (s *Service) reqToken() (io.ReadCloser, error) {
 
 // reqUser 请求用户信息
 func (s *Service) reqUser() (io.ReadCloser, error) {
-	resp, err := s.client.R().
-		Get("/api/pc/user/info")
+	resp, err := s.client.R().Get("/api/pc/user/info")
 
 	return handleHTTPResponse(resp, err)
 }

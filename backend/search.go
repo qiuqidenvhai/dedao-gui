@@ -10,3 +10,9 @@ func (a *App) SearchCourse(keyword string, page, pageSize int) (result *services
 	result, err = app.SearchCourse(keyword, page, pageSize)
 	return
 }
+
+// SearchAll 统一搜索（课程、电子书、听书等）
+func (a *App) SearchAll(keyword string, page, pageSize int) (result *services.SearchResult, err error) {
+	result, err = app.SearchAll(keyword, page, pageSize)
+	return
+}
