@@ -77,21 +77,48 @@ func (a *App) CheckLogin(token, qrCodeString string) (result LoginResult, err er
 }
 
 func (a *App) Logout() (err error) {
-	err = app.Logout()
+	// 清除 services 包级变量
+	services.ClearServiceState()
+	// 清除 config 内存状态
+	config.Instance.Reset()
+	// 删除本地配置文件
+	err = config.Instance.DeleteConfigFile()
+	// 清除 backend.Instance（放在最后，确保配置已清除）
+	Instance = nil
 	return
 }
 
+// EnsureInstance 确保 backend.Instance 可用，不可用时返回错误
+func EnsureInstance() error {
+	if Instance == nil {
+		Instance = config.Instance.ActiveUserService()
+		if Instance == nil {
+			return errors.New("未登录")
+		}
+	}
+	return nil
+}
+
 func (a *App) UserInfo() (user *services.User, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	user, err = Instance.User()
 	return
 }
 
 func (a *App) EbookUserInfo() (user *services.EbookVIPInfo, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	user, err = Instance.EbookUserInfo()
 	return
 }
 
 func (a *App) OdobUserInfo() (user *services.OdobVip, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	user, err = Instance.OdobUserInfo()
 	return
 }

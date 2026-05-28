@@ -15,6 +15,17 @@ import (
 )
 
 var (
+	CsrfToken = ""
+	SetCookie []string
+)
+
+// ClearServiceState 清除 services 包级状态（Logout 时调用）
+func ClearServiceState() {
+	CsrfToken = ""
+	SetCookie = nil
+}
+
+var (
 	dedaoCommURL = &url.URL{
 		Scheme: "https",
 		Host:   "dedao.cn",

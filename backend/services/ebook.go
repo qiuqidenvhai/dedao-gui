@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -316,14 +317,23 @@ func (s *Service) EbookPages(chapterID, token string, index, count, offset int) 
 
 // EbookDetail get ebook detail
 func (s *Service) EbookDetail(enid string) (detail *EbookDetail, err error) {
+	fmt.Printf("[DEBUG] EbookDetail called with enid: [%s]\n", enid)
 	operation := func() (*EbookDetail, error) {
 		body, err := s.reqEbookDetail(enid)
 		if err != nil {
+			fmt.Printf("[DEBUG] reqEbookDetail error: %v\n", err)
 			return nil, err
 		}
 		defer body.Close()
+		// 读取body用于调试
+		buf := new(strings.Builder)
+		io.Copy(buf, body)
+		respBody := buf.String()
+		fmt.Printf("[DEBUG] EbookDetail response (len=%d): %.200s\n", len(respBody), respBody)
+		body2 := io.NopCloser(strings.NewReader(respBody))
 		var d *EbookDetail
-		if err = handleJSONParse(body, &d); err != nil {
+		if err = handleJSONParse(body2, &d); err != nil {
+			fmt.Printf("[DEBUG] handleJSONParse error: %v\n", err)
 			return nil, err
 		}
 		return d, nil

@@ -77,6 +77,9 @@ func (a *App) ArticleDetail(aType int, aEnid string) (markdown string, err error
 }
 
 func (a *App) GetArticleIntro(aType int, enid string) (intro *services.ArticleIntro, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	info, err := Instance.ArticleInfo(enid, aType)
 	if err != nil {
 		return
@@ -86,13 +89,17 @@ func (a *App) GetArticleIntro(aType int, enid string) (intro *services.ArticleIn
 }
 
 func (a *App) GetVolcPlayAuthToken(mediaID, securityToken string) (info *services.MediaVolc, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	info, err = Instance.GetVolcPlayAuthToken(mediaID, securityToken)
-	// fmt.Println(info)
-	// fmt.Println(err)
 	return
 }
 
 func (a *App) GetVolcPlayInfo(query string) (info *services.VodPlayInfoResp, err error) {
+	if err = EnsureInstance(); err != nil {
+		return
+	}
 	info, err = Instance.GetVolcPlayInfo(query)
 	if err != nil {
 		return

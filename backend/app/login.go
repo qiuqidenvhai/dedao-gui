@@ -50,6 +50,9 @@ func CheckLogin(token, qrCode string) (user *services.User, err error) {
 }
 
 func Logout() (err error) {
+	// 先重置内存中的登录状态
+	config.Instance.Reset()
+	// 再删除配置文件
 	err = config.Instance.DeleteConfigFile()
 	return
 }

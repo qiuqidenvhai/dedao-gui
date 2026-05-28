@@ -1,0 +1,90 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/go-resty/resty/v2"
+)
+
+type Response struct {
+	H struct {
+		C int    `json:"c"`
+		E string `json:"e"`
+	} `json:"h"`
+}
+
+func main() {
+	enid := "5lZOKpMGr9mgdOvYa6Ej75XRo1NML3jOgVGwk8ZVzb2nqPpDxBeJlK4AyQ8RPQv2"
+
+	// 方式1: 标准 http client (和我测试脚本一样，成功过)
+	fmt.Println("=== 方式1: 标准 http.Client ===")
+	client1 := &http.Client{Timeout: 10 * time.Second}
+	req1, _ := http.NewRequest("GET", "https://www.dedao.cn/pc/ebook2/v1/pc/detail?id="+enid, nil)
+	req1.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req1.Header.Set("Referer", "https://www.dedao.cn/")
+	resp1, err := client1.Do(req1)
+	if err != nil {
+		fmt.Println("ERROR:", err)
+	} else {
+		body1, _ := io.ReadAll(resp1.Body)
+		resp1.Body.Close()
+		var r1 Response
+		json.Unmarshal(body1, &r1)
+		fmt.Printf("Status: %d, h.c=%d, h.e=%s\n", resp1.StatusCode, r1.H.C, r1.H.E)
+		fmt.Printf("Body preview: %.100s\n", string(body1))
+	}
+
+	// 方式2: resty client (模拟 app/ebook.go 的方式)
+	fmt.Println("\n=== 方式2: resty.New() with SetQueryParam ===")
+	restyClient := resty.New()
+	restyClient.SetBaseURL("https://www.dedao.cn")
+	restyClient.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	restyClient.SetHeader("Referer", "https://www.dedao.cn/")
+	restyClient.SetHeader("Xi-DT", "web")
+
+	resp2, err2 := restyClient.R().SetQueryParam("id", enid).Get("/pc/ebook2/v1/pc/detail")
+	if err2 != nil {
+		fmt.Println("ERROR:", err2)
+	} else {
+		fmt.Printf("Status: %d\n", resp2.StatusCode())
+		var r2 Response
+		json.Unmarshal(resp2.Body(), &r2)
+		fmt.Printf("h.c=%d, h.e=%s\n", r2.H.C, r2.H.E)
+		fmt.Printf("Body preview: %.100s\n", string(resp2.Body()))
+	}
+
+	// 方式3: resty with URL encoded ID
+	fmt.Println("\n=== 方式3: resty with URL-encoded ID ===")
+	encoded := url.QueryEscape(enid)
+	resp3, err3 := restyClient.R().Get("/pc/ebook2/v1/pc/detail?id=" + encoded)
+	if err3 != nil {
+		fmt.Println("ERROR:", err3)
+	} else {
+		fmt.Printf("Status: %d\n", resp3.StatusCode())
+		var r3 Response
+		json.Unmarshal(resp3.Body(), &r3)
+		fmt.Printf("h.c=%d, h.e=%s\n", r3.H.C, r3.H.E)
+		fmt.Printf("Body preview: %.100s\n", string(resp3.Body()))
+	}
+
+	// 方式4: 直接在 URL 放 enid，不用 QueryParam
+	fmt.Println("\n=== 方式4: 直接拼接 URL ===")
+	resp4, err4 := restyClient.R().Get("https://www.dedao.cn/pc/ebook2/v1/pc/detail?id=" + enid)
+	if err4 != nil {
+		fmt.Println("ERROR:", err4)
+	} else {
+		fmt.Printf("Status: %d\n", resp4.StatusCode())
+		var r4 Response
+		json.Unmarshal(resp4.Body(), &r4)
+		fmt.Printf("h.c=%d, h.e=%s\n", r4.H.C, r4.H.E)
+		fmt.Printf("Body preview: %.100s\n", string(resp4.Body()))
+	}
+}

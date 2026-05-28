@@ -212,8 +212,23 @@ func (c *ConfigsData) DeleteConfigFile() (err error) {
 	if c.configFilePath == "" {
 		return nil
 	}
+	// 先关闭文件句柄，否则 Windows 上无法删除
+	c.fileMu.Lock()
+	if c.configFile != nil {
+		c.configFile.Close()
+		c.configFile = nil
+	}
+	c.fileMu.Unlock()
 	err = os.Remove(c.configFilePath)
 	return
+}
+
+// Reset 清除所有登录状态（内存数据）
+func (c *ConfigsData) Reset() {
+	c.AcitveUID = ""
+	c.Users = nil
+	c.activeUser = nil
+	c.service = nil
 }
 
 // New config
@@ -244,6 +259,10 @@ func GetConfigDir() string {
 // ActiveUserService user
 func (c *ConfigsData) ActiveUserService() *services.Service {
 	if c.service == nil {
+		// 如果没有 activeUser，创建一个空的（用于获取登录页等公开接口）
+		if c.activeUser == nil {
+			c.activeUser = new(Dedao)
+		}
 		c.service = c.activeUser.New()
 	}
 	return c.service

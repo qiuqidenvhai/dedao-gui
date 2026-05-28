@@ -85,6 +85,8 @@ export function OpenFileDialog(arg1:string):Promise<string>;
 
 export function OutsideDetail(arg1:string):Promise<services.OutsideDetail>;
 
+export function SearchAll(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
+
 export function SearchCourse(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
 
 export function SearchHot():Promise<services.SearchTot>;

@@ -307,11 +307,6 @@ type HomeInitState struct {
 	Uid      string   `json:"uid"`
 }
 
-var (
-	CsrfToken = ""
-	SetCookie []string
-)
-
 func (s *Service) GetHomeInitialState() (state HomeInitState, err error) {
 	resp, err := s.client.R().Get("")
 	if err != nil {

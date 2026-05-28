@@ -162,12 +162,12 @@ export function OutsideDetail(arg1) {
   return window['go']['backend']['App']['OutsideDetail'](arg1);
 }
 
-export function SearchCourse(arg1, arg2, arg3) {
-  return window['go']['backend']['App']['SearchCourse'](arg1, arg2, arg3);
-}
-
 export function SearchAll(arg1, arg2, arg3) {
   return window['go']['backend']['App']['SearchAll'](arg1, arg2, arg3);
+}
+
+export function SearchCourse(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['SearchCourse'](arg1, arg2, arg3);
 }
 
 export function SearchHot() {

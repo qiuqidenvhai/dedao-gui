@@ -90,9 +90,13 @@ func buildEbookInfoFromDetail(detail *services.EbookDetail) *services.EbookInfo 
 }
 
 func EbookInfo(enID string) (info *services.EbookInfo, err error) {
+	// 调试日志
+	fmt.Printf("[DEBUG] EbookInfo called with enID: [%s] (len=%d)\n", enID, len(enID))
+	
 	// 直接使用Detail API获取书籍信息，绕过get_book_info
 	detail, detailErr := getService().EbookDetail(enID)
 	if detailErr != nil {
+		fmt.Printf("[DEBUG] EbookDetail error: %v\n", detailErr)
 		err = detailErr
 		return
 	}
