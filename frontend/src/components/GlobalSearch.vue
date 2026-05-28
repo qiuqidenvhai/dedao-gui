@@ -14,6 +14,13 @@
       @keyup.enter="handleEnter"
       class="search-autocomplete"
     />
+    <!-- 电子书/听书详情弹窗 -->
+    <ebook-info 
+      v-if="ebookInfoVisible" 
+      :enid="selectedEnid" 
+      :dialog-visible="ebookInfoVisible" 
+      @close="closeEbookInfo">
+    </ebook-info>
   </div>
 </template>
 
@@ -23,12 +30,15 @@ import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 // @ts-ignore
 import { SearchHot, SearchAll } from '../../wailsjs/go/backend/App'
+import EbookInfo from './EbookInfo.vue'
 
 const router = useRouter()
 
 const searchKeyword = ref('')
 const hotSearchData = ref<any[]>([])
 const searchLoading = ref(false)
+const ebookInfoVisible = ref(false)
+const selectedEnid = ref('')
 
 // 加载热搜词
 onMounted(async () => {
@@ -137,7 +147,13 @@ const querySearch = async (queryString: string, cb: (results: any[]) => void) =>
   }
 }
 
-// 处理选择 - 根据类型跳转到对应页面
+// 关闭电子书详情弹窗
+const closeEbookInfo = () => {
+  ebookInfoVisible.value = false
+  selectedEnid.value = ''
+}
+
+// 处理选择 - 根据类型跳转到对应页面或打开详情弹窗
 const handleSelect = (item: any) => {
   // 如果是热搜词（没有path字段），跳转到课程搜索页面
   if (!item.path) {
@@ -145,8 +161,12 @@ const handleSelect = (item: any) => {
       path: '/bought/course',
       query: { keyword: item.searchKey || item.title }
     })
+  } else if (item.enid && (item.type === 2 || item.type === 3)) {
+    // 电子书(type=2) 或 听书(type=3)：直接打开详情弹窗，可以加入书架
+    selectedEnid.value = item.enid
+    ebookInfoVisible.value = true
   } else {
-    // 根据搜索结果的类型跳转到对应页面
+    // 其他类型：跳转到对应列表页
     router.push({
       path: item.path,
       query: { keyword: item.title }
