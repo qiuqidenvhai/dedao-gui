@@ -136,13 +136,14 @@ func (s *Service) SearchSuggest(keyword string, page, pageSize int) (result *Sea
 			cleanIntro = strings.ReplaceAll(cleanIntro, "</hl>", "")
 
 			course := Course{
-				ID:         item.ID,
-				Enid:       item.Extra.Enid,
-				Type:       pType,
-				ClassType:  classType,
-				Title:      cleanTitle,
-				Intro:      cleanIntro,
-				Author:     item.Author,
+				ID:          item.ID,
+				Enid:        item.Extra.Enid,
+				Type:        pType,
+				ClassType:   classType,
+				Title:       cleanTitle,
+				Intro:       cleanIntro,
+				Author:      item.Author,
+				Icon:        item.Extra.Image, // 设置封面图片
 				IsCollected: false,
 			}
 			courses = append(courses, course)
@@ -278,13 +279,14 @@ func (s *Service) SearchEbook(keyword string, page, pageSize int) (result *Searc
 			cleanIntro = strings.ReplaceAll(cleanIntro, "</hl>", "")
 
 			course := Course{
-				ID:         item.ID,
-				Enid:       item.Extra.Enid,
-				Type:       2,
-				ClassType:  13,
-				Title:      cleanTitle,
-				Intro:      cleanIntro,
-				Author:     item.Author,
+				ID:          item.ID,
+				Enid:        item.Extra.Enid,
+				Type:        2,
+				ClassType:   13,
+				Title:       cleanTitle,
+				Intro:       cleanIntro,
+				Author:      item.Author,
+				Icon:        item.Extra.Image, // 设置封面图片
 				IsCollected: false,
 			}
 			courses = append(courses, course)
@@ -357,13 +359,14 @@ func (s *Service) SearchOdob(keyword string, page, pageSize int) (result *Search
 			cleanIntro = strings.ReplaceAll(cleanIntro, "</hl>", "")
 
 			course := Course{
-				ID:         item.ID,
-				Enid:       item.Extra.Enid,
-				Type:       3,
-				ClassType:  14,
-				Title:      cleanTitle,
-				Intro:      cleanIntro,
-				Author:     item.Author,
+				ID:          item.ID,
+				Enid:        item.Extra.Enid,
+				Type:        3,
+				ClassType:   14,
+				Title:       cleanTitle,
+				Intro:       cleanIntro,
+				Author:      item.Author,
+				Icon:        item.Extra.Image, // 设置封面图片
 				IsCollected: false,
 			}
 			courses = append(courses, course)
