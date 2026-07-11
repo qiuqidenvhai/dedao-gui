@@ -1,73 +1,29 @@
-```
-# Compiled and build artifacts
-*.o
-*.obj
-*.out
+build/bin
+node_modules
+frontend/dist
+
+output
+config.json
+
+# Binaries for programs and plugins
 *.exe
+*.exe~
 *.dll
 *.so
-*.a
+*.dylib
 
-# Dependencies
-vendor/
-third_party/
+# Test binary, build with `go test -c`
+*.test
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+coverage.txt
 
-# Editors
-.vscode/
-.idea/
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Distribution / Build
-dist/
-build/
-target/
-bin/
-lib/
-tmp/
-temp/
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Python specific
-__pycache__/
+# Python
 *.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.Python
-env/
-venv/
-.venv/
-.venv.bak/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.tox.bak/
-.coverage
-.coverage.*
+
+.vscode
+.idea
 .cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-*.sublime-project
-*.sublime-workspace
-.project
-.pydevproject
 .DS_Store
-Thumbs.db
-```
+.claude
