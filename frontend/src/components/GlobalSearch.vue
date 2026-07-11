@@ -23,8 +23,12 @@ import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 // @ts-ignore
 import { SearchHot, SearchAll } from '../../wailsjs/go/backend/App'
+// @ts-ignore
+import { EbookInfo as GetEbookInfo } from '../../wailsjs/go/backend/App'
+import { useEbookStore } from '../stores/ebook'
 
 const router = useRouter()
+const ebookStore = useEbookStore()
 
 const searchKeyword = ref('')
 const hotSearchData = ref<any[]>([])
@@ -137,22 +141,52 @@ const querySearch = async (queryString: string, cb: (results: any[]) => void) =>
   }
 }
 
-// 处理选择 - 根据类型跳转到对应页面
-const handleSelect = (item: any) => {
-  // 如果是热搜词（没有path字段），跳转到课程搜索页面
-  if (!item.path) {
+// 标准化 ENID 格式
+const normalizeEnid = (enid: string): string => {
+  if (!enid) return enid
+  // 如果已经以 S 开头或长度超过 20，认为是完整格式
+  if (enid.startsWith('S') || enid.length > 20) {
+    return enid
+  }
+  // 否则添加 S 前缀
+  return 'S' + enid
+}
+
+// 处理选择 - 根据类型跳转到对应页面或直接打开电子书详情
+const handleSelect = async (item: any) => {
+  searchKeyword.value = ''
+  
+  // 如果是热搜词（没有 path 字段），跳转到课程搜索页面
+  if (!item.path && !item.enid) {
     router.push({
       path: '/bought/course',
       query: { keyword: item.searchKey || item.title }
     })
-  } else {
-    // 根据搜索结果的类型跳转到对应页面
-    router.push({
-      path: item.path,
-      query: { keyword: item.title }
-    })
+    return
   }
-  searchKeyword.value = ''
+  
+  // 如果是电子书 (type=2) 或听书 (type=3)，直接打开详情弹窗
+  if (item.type === 2 || item.type === 3) {
+    try {
+      // 标准化 ENID 格式
+      const normalizedEnid = normalizeEnid(item.enid)
+      // 调用 API 获取书籍详情
+      const detail = await GetEbookInfo(normalizedEnid)
+      if (detail) {
+        // 打开 EbookInfo 弹窗
+        ebookStore.showEbookInfo(detail)
+        return
+      }
+    } catch (error) {
+      console.error('获取电子书详情失败:', error)
+    }
+  }
+  
+  // 其他类型跳转到对应页面
+  router.push({
+    path: item.path || '/bought/course',
+    query: { keyword: item.title }
+  })
 }
 
 // 处理回车 - 跳转到课程搜索页面（带回填关键词）
