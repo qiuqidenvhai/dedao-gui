@@ -1,29 +1,37 @@
-build/bin
-node_modules
-frontend/dist
+```
+# Dependencies
+go.sum
+vendor/
 
-output
-config.json
+# Logs and temp files
+*.log
+*.tmp
 
-# Binaries for programs and plugins
+# Environment
+.env
+.env.local
+*.env.*
+
+# Build artifacts
+bin/
 *.exe
-*.exe~
 *.dll
 *.so
-*.dylib
-
-# Test binary, build with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
+*.a
 *.out
-coverage.txt
 
-# Python
-*.pyc
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-.vscode
-.idea
-.cache
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# OS
 .DS_Store
-.claude
+Thumbs.db
+```

@@ -38,3 +38,9 @@ func (a *App) AlgoProduct(param services.AlgoFilterParam) (resp *services.AlgoPr
 	resp, err = Instance.AlgoProduct(param)
 	return
 }
+
+// SearchHall 搜索大厅数据（作为通用搜索的兜底）
+func (a *App) SearchHall(keyword string, limit int) (results []services.Course, err error) {
+	results, err = Instance.SearchHall(keyword, limit)
+	return
+}

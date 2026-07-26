@@ -357,6 +357,93 @@ func (s *Service) SearchHot() (list *SearchTot, err error) {
 	return
 }
 
+// SearchHall 搜索大厅数据（作为通用搜索的兜底）
+// 从向日葵标签内容中搜索匹配的书籍/课程
+func (s *Service) SearchHall(keyword string, limit int) (results []Course, err error) {
+	// 先获取标签列表
+	labelList, err := s.SunflowerLabelList(2) // 2-电子书
+	if err != nil {
+		return nil, err
+	}
+	
+	results = []Course{}
+	
+	// 遍历每个标签的内容
+	for _, nav := range labelList.List {
+		if len(results) >= limit {
+			break
+		}
+		
+		content, err := s.SunflowerLabelContent(nav.Enid, 2, 0, 10)
+		if err != nil {
+			continue
+		}
+		
+		// 筛选匹配关键词的产品
+		for _, prod := range content.ProductList {
+			if len(results) >= limit {
+				break
+			}
+			
+			// 检查标题或简介是否包含关键词
+			if strings.Contains(prod.Title, keyword) || strings.Contains(prod.Intro, keyword) {
+				course := Course{
+					ID:          0,
+					Enid:        prod.ProductEnid,
+					Type:        2, // 电子书
+					ClassType:   13,
+					Title:       prod.Title,
+					Intro:       prod.Intro,
+					Author:      strings.Join(prod.AuthorList, ","),
+					Icon:        prod.IndexImage, // 设置封面图片
+					IsCollected: false,
+				}
+				results = append(results, course)
+			}
+		}
+	}
+	
+	// 如果电子书结果不足，尝试搜索课程（nav_type=4）
+	if len(results) < limit {
+		labelList4, err := s.SunflowerLabelList(4) // 4-课程
+		if err == nil {
+			for _, nav := range labelList4.List {
+				if len(results) >= limit {
+					break
+				}
+				
+				content, err := s.SunflowerLabelContent(nav.Enid, 4, 0, 10)
+				if err != nil {
+					continue
+				}
+				
+				for _, prod := range content.ProductList {
+					if len(results) >= limit {
+						break
+					}
+					
+					if strings.Contains(prod.Title, keyword) || strings.Contains(prod.Intro, keyword) {
+						course := Course{
+							ID:          0,
+							Enid:        prod.ProductEnid,
+							Type:        1, // 课程
+							ClassType:   1,
+							Title:       prod.Title,
+							Intro:       prod.Intro,
+							Author:      strings.Join(prod.AuthorList, ","),
+							Icon:        prod.IndexImage,
+							IsCollected: false,
+						}
+						results = append(results, course)
+					}
+				}
+			}
+		}
+	}
+	
+	return results, nil
+}
+
 // SunflowerLabelList 首页导航标签列表
 // nType 2-好看又好查的电子书, 4-精选课程
 func (s *Service) SunflowerLabelList(nType int) (list *SunflowerLabelList, err error) {

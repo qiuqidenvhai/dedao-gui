@@ -70,7 +70,7 @@ onMounted(async () => {
   }
 })
 
-// 搜索建议 - 调用统一的搜索API
+// 搜索建议 - 调用统一的搜索API + 大厅数据兜底
 const querySearch = async (queryString: string, cb: (results: any[]) => void) => {
   if (!queryString || queryString.trim().length === 0) {
     // 没有输入时显示热搜词
@@ -80,64 +80,83 @@ const querySearch = async (queryString: string, cb: (results: any[]) => void) =>
   
   searchLoading.value = true
   try {
-    // 调用统一的搜索API
-    const result = await SearchAll(queryString.trim(), 1, 20)
-    if (result && result.list && result.list.length > 0) {
-      const searchResults = result.list.map((item: any) => {
-        // 根据类型决定跳转路径
-        let path = '/bought/course'
-        let typeName = '课程'
-        
-        // 判断内容类型 - 根据type字段或数据特征判断
-        const itemType = item.type || item.product_type || 0
-        
-        // 常见的类型判断
-        // 1: 课程, 2: 电子书, 3: 听书, 4: 视频等
-        if (itemType === 2 || item.type_name?.includes('电子书') || item.type_name?.includes('ebook')) {
-          path = '/bought/ebook'
-          typeName = '电子书'
-        } else if (itemType === 3 || item.type_name?.includes('听书') || item.type_name?.includes('odob')) {
-          path = '/bought/odob'
-          typeName = '听书'
-        } else if (itemType === 4 || item.type_name?.includes('视频')) {
-          path = '/bought/video'
-          typeName = '视频'
+    const keyword = queryString.trim()
+    const allResults: any[] = []
+    
+    // 1. 优先调用通用搜索 API
+    try {
+      const searchResult = await SearchAll(keyword, 1, 20)
+      if (searchResult && searchResult.list && searchResult.list.length > 0) {
+        const searchResults = searchResult.list.map((item: any) => formatSearchItem(item))
+        allResults.push(...searchResults)
+      }
+    } catch (error) {
+      console.warn('通用搜索失败，尝试大厅数据:', error)
+    }
+    
+    // 2. 如果通用搜索结果少于 5 条，补充大厅数据（双重保障）
+    if (allResults.length < 5) {
+      try {
+        // @ts-ignore
+        const { SearchHall } = await import('../../wailsjs/go/backend/App')
+        const hallResult = await SearchHall(keyword, 10)
+        if (hallResult && hallResult.length > 0) {
+          // 过滤掉已经存在的项（避免重复）
+          const existingEnids = new Set(allResults.map(r => r.enid))
+          const hallResults = hallResult.filter((item: any) => !existingEnids.has(item.enid))
+          allResults.push(...hallResults)
         }
-        
-        return {
-          value: item.title || item.name,
-          title: item.title || item.name,
-          enid: item.enid,
-          icon: item.icon,
-          type: itemType,
-          typeName: typeName,
-          path: path,
-          intro: item.intro || item.description || ''
-        }
-      })
-      cb(searchResults)
+      } catch (error) {
+        console.warn('大厅搜索补充失败:', error)
+      }
+    }
+    
+    if (allResults.length > 0) {
+      cb(allResults)
     } else {
-      // 没有搜索结果时过滤热搜词
+      // 完全没有结果时显示匹配的热词
       const filtered = hotSearchData.value.filter(item => {
         const title = (item.title || '').toLowerCase()
         const searchKey = (item.searchKey || '').toLowerCase()
-        const query = queryString.toLowerCase()
+        const query = keyword.toLowerCase()
         return title.includes(query) || searchKey.includes(query)
       })
       cb(filtered.slice(0, 10))
     }
   } catch (error) {
     console.error('搜索失败:', error)
-    // 搜索失败时过滤热搜词
-    const filtered = hotSearchData.value.filter(item => {
-      const title = (item.title || '').toLowerCase()
-      const searchKey = (item.searchKey || '').toLowerCase()
-      const query = queryString.toLowerCase()
-      return title.includes(query) || searchKey.includes(query)
-    })
-    cb(filtered.slice(0, 10))
+    cb([])
   } finally {
     searchLoading.value = false
+  }
+}
+
+// 格式化搜索项
+const formatSearchItem = (item: any) => {
+  let path = '/bought/course'
+  let typeName = '课程'
+  const itemType = item.type || item.product_type || 0
+  
+  if (itemType === 2 || item.type_name?.includes('电子书') || item.type_name?.includes('ebook')) {
+    path = '/bought/ebook'
+    typeName = '电子书'
+  } else if (itemType === 3 || item.type_name?.includes('听书') || item.type_name?.includes('odob')) {
+    path = '/bought/odob'
+    typeName = '听书'
+  } else if (itemType === 4 || item.type_name?.includes('视频')) {
+    path = '/bought/video'
+    typeName = '视频'
+  }
+  
+  return {
+    value: item.title || item.name,
+    title: item.title || item.name,
+    enid: item.enid,
+    icon: item.icon,
+    type: itemType,
+    typeName: typeName,
+    path: path,
+    intro: item.intro || item.description || ''
   }
 }
 
