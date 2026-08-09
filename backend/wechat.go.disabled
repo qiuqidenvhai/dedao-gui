@@ -1,0 +1,87 @@
+package backend
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/yann0917/dedao-gui/backend/services"
+)
+
+// WeChatAuthService 微信登录服务类型
+type WeChatAuthService struct {
+	cfg *services.WeChatConfig
+}
+
+// NewWeChatAuthService 创建微信登录服务实例
+func NewWeChatAuthService() *WeChatAuthService {
+	cfg := services.GetWeChatConfig()
+	if cfg == nil || cfg.AppID == "" || cfg.AppSecret == "" {
+		panic("未配置微信登录信息，请在config.json中设置wechat.appid和wechat.appsecret")
+	}
+	return &WeChatAuthService{cfg: cfg}
+}
+
+// GetWeChatAuthURL 生成微信授权页面URL（用于唤起微信扫码）
+func (w *WeChatAuthService) GetWeChatAuthURL() (string, error) {
+	if w.cfg == nil {
+		return "", fmt.Errorf("微信配置为空")
+	}
+
+	redirectURI := w.cfg.RedirectURI
+	if redirectURI == "" {
+		redirectURI = "http://localhost:port/wechat/callback"
+	}
+
+	params := url.Values{}
+	params.Set("appid", w.cfg.AppID)
+	params.Set("redirect_uri", redirectURI)
+	params.Set("response_type", "code")
+	params.Set("scope", "snsapi_login")
+	params.Set("state", "")
+
+	weAuthURL := "https://open.weixin.qq.com/connect/qrconnect?" + params.Encode()
+	return weAuthURL, nil
+}
+
+// BindOrCreateUserByWeChat 根据微信用户信息绑定或创建本地用户（返回cookie等登录态）
+func (w *WeChatAuthService) WeChatLogin(code string) (*services.WeChatLoginResult, error) {
+	if code == "" {
+		return nil, fmt.Errorf("授权码不能为空")
+	}
+
+	// Step 1: 用code换取access_token和openid
+	authCodeResp, err := services.ExchangeCodeForToken(w.cfg.AppID, w.cfg.AppSecret, code)
+	if err != nil {
+		return nil, fmt.Errorf("获取微信token失败：%w", err)
+	}
+
+	// Step 2: 用openid和accessToken获取用户信息
+	userInfo, err := services.GetWeChatUserInfo(authCodeResp.OpenID, authCodeResp.AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("获取微信用户信息失败：%w", err)
+	}
+
+	// Step 3: 绑定或创建本地用户（返回cookie等登录态）
+	bindResult, err := services.BindOrCreateUserByWeChat(userInfo, nil)
+	if err != nil {
+		return nil, fmt.Errorf("绑定/创建用户失败：%w", err)
+	}
+
+	return bindResult, nil
+}
+
+// WeChatCallbackHandler 微信回调处理函数（接收code并交换token）
+func (w *WeChatAuthService) WeChatCallbackHandler(code string) (*services.WeChatLoginResult, error) {
+	return w.WeChatLogin(code)
+}
+
+// GetWeChatUserInfoByOpenID 通过openId获取微信用户信息（备用接口）
+func (w *WeChatAuthService) GetWeChatUserInfoByOpenID(openID, accessToken string) (*services.WeChatUserInfo, error) {
+	return services.GetWeChatUserInfo(openID, accessToken)
+}
+
+// BindUserByWeChatAlias 根据昵称绑定已有用户（扩展接口）
+func (w *WeChatAuthService) BindUserByWeChatAlias(nickname string) error {
+	fmt.Printf("[WeChat] 尝试绑定用户昵称: %s\n", nickname)
+	return nil
+}

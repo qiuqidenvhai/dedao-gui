@@ -109,6 +109,24 @@ export namespace backend {
 		    return a;
 		}
 	}
+	export class PhoneCodeResult {
+	    token: string;
+	    message: string;
+	    needCaptcha: boolean;
+	    captchaId?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PhoneCodeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.token = source["token"];
+	        this.message = source["message"];
+	        this.needCaptcha = source["needCaptcha"];
+	        this.captchaId = source["captchaId"];
+	    }
+	}
 	export class QrCodeResp {
 	    token: string;
 	    qrCode: string;
@@ -4846,6 +4864,100 @@ export namespace services {
 	
 	
 	
+	export class VIPUser {
+	    info: string;
+	    stat: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new VIPUser(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.info = source["info"];
+	        this.stat = source["stat"];
+	    }
+	}
+	export class User {
+	    nickname: string;
+	    avatar: string;
+	    today_study_time: number;
+	    study_serial_days: number;
+	    IsV: number;
+	    vip_user: VIPUser;
+	    is_teacher: number;
+	    uid_hazy: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new User(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nickname = source["nickname"];
+	        this.avatar = source["avatar"];
+	        this.today_study_time = source["today_study_time"];
+	        this.study_serial_days = source["study_serial_days"];
+	        this.IsV = source["IsV"];
+	        this.vip_user = this.convertValues(source["vip_user"], VIPUser);
+	        this.is_teacher = source["is_teacher"];
+	        this.uid_hazy = source["uid_hazy"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PhoneLoginResp {
+	    success: boolean;
+	    message: string;
+	    cookie: string;
+	    user?: User;
+	
+	    static createFrom(source: any = {}) {
+	        return new PhoneLoginResp(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.message = source["message"];
+	        this.cookie = source["cookie"];
+	        this.user = this.convertValues(source["user"], User);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	export class ProductSimple {
@@ -5364,64 +5476,7 @@ export namespace services {
 	
 	
 	
-	export class VIPUser {
-	    info: string;
-	    stat: number;
 	
-	    static createFrom(source: any = {}) {
-	        return new VIPUser(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.info = source["info"];
-	        this.stat = source["stat"];
-	    }
-	}
-	export class User {
-	    nickname: string;
-	    avatar: string;
-	    today_study_time: number;
-	    study_serial_days: number;
-	    IsV: number;
-	    vip_user: VIPUser;
-	    is_teacher: number;
-	    uid_hazy: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new User(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.nickname = source["nickname"];
-	        this.avatar = source["avatar"];
-	        this.today_study_time = source["today_study_time"];
-	        this.study_serial_days = source["study_serial_days"];
-	        this.IsV = source["IsV"];
-	        this.vip_user = this.convertValues(source["vip_user"], VIPUser);
-	        this.is_teacher = source["is_teacher"];
-	        this.uid_hazy = source["uid_hazy"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	
 	

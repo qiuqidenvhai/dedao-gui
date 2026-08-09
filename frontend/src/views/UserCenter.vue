@@ -1,6 +1,6 @@
 <template>
     <div class="user-center">
-        <el-card class="user-card" shadow="hover">
+        <el-card v-if="isLoggedIn" class="user-card" shadow="hover">
             <!-- 用户信息头部 -->
             <div class="user-header">
                 <div class="user-info">
@@ -45,7 +45,7 @@
             <!-- 学习数据 -->
             <div class="study-stats">
                 <div class="stat-item">
-                    <span class="stat-value">{{ (user.today_study_time / 60).toFixed(0) }}</span>
+                    <span class="stat-value">{{ formatStudyMinutes(user.today_study_time) }}</span>
                     <span class="stat-label">今日学习(分钟)</span>
                 </div>
                 <div class="stat-item">
@@ -158,74 +158,75 @@
                 </el-button>
             </div>
         </el-card>
+
+        <!-- 未登录状态 -->
+        <el-card v-else class="user-card empty-card" shadow="hover">
+            <el-empty description="尚未登录">
+                <el-button type="primary" @click="goLogin">立即登录</el-button>
+            </el-empty>
+        </el-card>
     </div>
 </template>
 
 <script lang="ts" setup>
-import { reactive, onMounted } from 'vue'
+import { reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { SwitchButton, Clock, Present, School, Headset, Reading } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 
 import { UserInfo, EbookUserInfo, OdobUserInfo } from '../../wailsjs/go/backend/App'
 import { services } from '../../wailsjs/go/models'
 import { userStore } from '../stores/user';
 import { timestampToTime } from '../utils/utils'
+
 const store = userStore()
-let user = reactive(new services.User)
-let ebookUser = reactive(new services.EbookVIPInfo)
-let odobUser = reactive(new services.OdobVip)
-odobUser.user = new services.OdobUser
+const router = useRouter()
+
+const formatStudyMinutes = (value: unknown) => {
+    const seconds = Number(value)
+    return Number.isFinite(seconds) ? (seconds / 60).toFixed(0) : '0'
+}
+
+const isLoggedIn = computed(() => !!store.user?.nickname)
+
+const user = reactive(new services.User()) as any
+const ebookUser = reactive(new services.EbookVIPInfo()) as any
+const odobUser = reactive(new services.OdobVip()) as any
+odobUser.user = new services.OdobUser()
 
 const handleLogout = async () => {
     try {
         await store.logout()
-        ElMessage.success('已退出登录')
     } catch (error) {
-        ElMessage.error('退出失败，请重试')
         console.error('Logout error:', error)
     }
 }
 
-onMounted(() => {
+const goLogin = () => {
+    router.push('/user/login')
+}
 
-})
-
-const getUserInfo = async () => {
+const loadUserData = async () => {
+    if (!isLoggedIn.value) return
     UserInfo().then(result => {
         Object.assign(user, result)
         store.user = user
-        console.log(store)
     })
-}
-getUserInfo()
-
-const getEbookUserInfo = async () => {
-    await EbookUserInfo().then(result => {
-        console.log(result)
+    EbookUserInfo().then(result => {
         Object.assign(ebookUser, result)
     }).catch((error) => {
-        ElMessage({
-            message: error,
-            type: 'warning'
-        })
+        console.warn('EbookUserInfo error:', error)
     })
-}
-getEbookUserInfo()
-
-const getOdobUserInfo = async () => {
-    await OdobUserInfo().then(result => {
-        console.log(result)
+    OdobUserInfo().then(result => {
         Object.assign(odobUser, result)
     }).catch((error) => {
-        ElMessage({
-            message: error,
-            type: 'warning'
-        })
+        console.warn('OdobUserInfo error:', error)
     })
 }
 
-getOdobUserInfo()
-
+onMounted(() => {
+    loadUserData()
+})
 </script>
 <style scoped>
 .user-center {
@@ -234,7 +235,7 @@ getOdobUserInfo()
     height: calc(100vh - 60px);
     overflow-y: auto;
     box-sizing: border-box;
-    
+
     /* 隐藏滚动条但保留功能 - 清新风格 */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE 10+ */
@@ -248,6 +249,10 @@ getOdobUserInfo()
     max-width: 800px;
     margin: 0 auto;
     border-radius: 12px;
+}
+
+.empty-card {
+    margin-top: 80px;
 }
 
 .user-header {

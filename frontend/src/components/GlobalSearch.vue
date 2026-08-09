@@ -14,13 +14,27 @@
       @keyup.enter="handleEnter"
       class="search-autocomplete"
     />
-    <!-- 电子书/听书详情弹窗 -->
-    <ebook-info 
-      v-if="ebookInfoVisible" 
-      :enid="selectedEnid" 
-      :dialog-visible="ebookInfoVisible" 
-      @close="closeEbookInfo">
-    </ebook-info>
+    <!-- 课程详情弹窗 -->
+    <course-info
+      v-if="courseInfoVisible"
+      :enid="selectedEnid"
+      :dialog-visible="courseInfoVisible"
+      @close="closeCourseInfo"
+    />
+    <!-- 电子书详情弹窗（含加入书架/移出书架） -->
+    <ebook-info
+      v-if="ebookInfoVisible"
+      :enid="selectedEnid"
+      :dialog-visible="ebookInfoVisible"
+      @close="closeEbookInfo"
+    />
+    <!-- 听书详情弹窗 -->
+    <audio-info
+      v-if="audioInfoVisible"
+      :enid="selectedEnid"
+      :dialog-visible="audioInfoVisible"
+      @close="closeAudioInfo"
+    />
   </div>
 </template>
 
@@ -30,14 +44,20 @@ import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 // @ts-ignore
 import { SearchHot, SearchAll } from '../../wailsjs/go/backend/App'
+import CourseInfo from './CourseInfo.vue'
 import EbookInfo from './EbookInfo.vue'
+import AudioInfo from './AudioInfo.vue'
 
 const router = useRouter()
 
 const searchKeyword = ref('')
 const hotSearchData = ref<any[]>([])
 const searchLoading = ref(false)
+
+// 三个类型弹窗状态
+const courseInfoVisible = ref(false)
 const ebookInfoVisible = ref(false)
+const audioInfoVisible = ref(false)
 const selectedEnid = ref('')
 
 // 加载热搜词
@@ -76,48 +96,54 @@ onMounted(async () => {
   }
 })
 
-// 搜索建议 - 调用统一的搜索API
+// 根据后端 type 字段分类内容类型和跳转路径
+// 后端 course.go Course struct 的 Type：
+//   2 = 电子书, 3 = 听书(oDOB), 66 = 课程(新 suggest), 1 = 课程(旧)
+const classifyItem = (item: any) => {
+  const itemType = item.type || 0
+  let path = '/bought/course'
+  let typeName = '课程'
+
+  if (itemType === 2) {
+    path = '/bought/ebook'
+    typeName = '电子书'
+  } else if (itemType === 3) {
+    path = '/bought/odob'
+    typeName = '听书'
+  } else if (itemType === 1 || itemType === 66) {
+    path = '/bought/course'
+    typeName = '课程'
+  } else if (itemType === 4 || item.type_name?.includes('视频')) {
+    path = '/bought/video'
+    typeName = '视频'
+  }
+
+  return { path, typeName, itemType }
+}
+
+// 搜索建议 - 调用统一的搜索API（已包含向日葵大厅兜底）
 const querySearch = async (queryString: string, cb: (results: any[]) => void) => {
   if (!queryString || queryString.trim().length === 0) {
     // 没有输入时显示热搜词
     cb(hotSearchData.value.slice(0, 10))
     return
   }
-  
+
   searchLoading.value = true
   try {
     // 调用统一的搜索API
     const result = await SearchAll(queryString.trim(), 1, 20)
     if (result && result.list && result.list.length > 0) {
       const searchResults = result.list.map((item: any) => {
-        // 根据类型决定跳转路径
-        let path = '/bought/course'
-        let typeName = '课程'
-        
-        // 判断内容类型 - 根据type字段或数据特征判断
-        const itemType = item.type || item.product_type || 0
-        
-        // 常见的类型判断
-        // 1: 课程, 2: 电子书, 3: 听书, 4: 视频等
-        if (itemType === 2 || item.type_name?.includes('电子书') || item.type_name?.includes('ebook')) {
-          path = '/bought/ebook'
-          typeName = '电子书'
-        } else if (itemType === 3 || item.type_name?.includes('听书') || item.type_name?.includes('odob')) {
-          path = '/bought/odob'
-          typeName = '听书'
-        } else if (itemType === 4 || item.type_name?.includes('视频')) {
-          path = '/bought/video'
-          typeName = '视频'
-        }
-        
+        const { path, typeName, itemType } = classifyItem(item)
         return {
           value: item.title || item.name,
           title: item.title || item.name,
           enid: item.enid,
           icon: item.icon,
           type: itemType,
-          typeName: typeName,
-          path: path,
+          typeName,
+          path,
           intro: item.intro || item.description || ''
         }
       })
@@ -147,13 +173,21 @@ const querySearch = async (queryString: string, cb: (results: any[]) => void) =>
   }
 }
 
-// 关闭电子书详情弹窗
+// 关闭各弹窗
+const closeCourseInfo = () => {
+  courseInfoVisible.value = false
+  selectedEnid.value = ''
+}
 const closeEbookInfo = () => {
   ebookInfoVisible.value = false
   selectedEnid.value = ''
 }
+const closeAudioInfo = () => {
+  audioInfoVisible.value = false
+  selectedEnid.value = ''
+}
 
-// 处理选择 - 根据类型跳转到对应页面或打开详情弹窗
+// 处理选择 - 根据类型打开对应详情弹窗
 const handleSelect = (item: any) => {
   // 如果是热搜词（没有path字段），跳转到课程搜索页面
   if (!item.path) {
@@ -161,16 +195,31 @@ const handleSelect = (item: any) => {
       path: '/bought/course',
       query: { keyword: item.searchKey || item.title }
     })
-  } else if (item.enid && (item.type === 2 || item.type === 3)) {
-    // 电子书(type=2) 或 听书(type=3)：直接打开详情弹窗，可以加入书架
-    selectedEnid.value = item.enid
-    ebookInfoVisible.value = true
   } else {
-    // 其他类型：跳转到对应列表页
-    router.push({
-      path: item.path,
-      query: { keyword: item.title }
-    })
+    switch (item.type) {
+      case 2:
+        // 电子书(type=2)：打开电子书详情弹窗，可加入书架/移出书架
+        selectedEnid.value = item.enid
+        ebookInfoVisible.value = true
+        break
+      case 3:
+        // 听书(type=3)：打开听书详情弹窗
+        selectedEnid.value = item.enid
+        audioInfoVisible.value = true
+        break
+      case 1:
+      case 66:
+        // 课程(type=1或66)：打开课程详情弹窗
+        selectedEnid.value = item.enid
+        courseInfoVisible.value = true
+        break
+      default:
+        // 其他类型：跳转到对应列表页
+        router.push({
+          path: item.path,
+          query: { keyword: item.title }
+        })
+    }
   }
   searchKeyword.value = ''
 }

@@ -73,6 +73,93 @@ func (s *Service) reqToken() (io.ReadCloser, error) {
 	return handleHTTPResponse(resp, err)
 }
 
+// AuthCodeSendResp 发送短信验证码响应
+type AuthCodeSendResp struct {
+	ErrCode int    `json:"errCode"`
+	ErrMsg  string `json:"errMsg"`
+	Data    struct {
+		NeedCaptcha bool   `json:"needCaptcha"`
+		CaptchaID   string `json:"captchaId"`
+	} `json:"data"`
+}
+
+// reqSendSMSCode 发送短信验证码（手机号登录）
+// token: X-Oauth-Access-Token from /loginapi/getAccessToken
+// 真实站点请求体为 {areaCode, phone, sysCode:"4", captcha, pname, scene}
+// 首次发送 captcha/pname/scene 传空串；needCaptcha=true 时返回 captchaId，需滑完滑块后用 validate 重发。
+func (s *Service) reqSendSMSCode(token, phone, captcha string) (resp *AuthCodeSendResp, err error) {
+	// 真实站点首次发码【不携带】captcha 字段；带空串 captcha:"" 会被 dedao 判为参数异常(errCode 20003)。
+	// 仅在滑完易盾滑块后用 validate token 重发时才带上 captcha 字段。
+	body := map[string]interface{}{
+		"areaCode": "86",
+		"phone":    phone,
+		"sysCode":  "4",
+		"pname":    "",
+		"scene":    "",
+	}
+	if captcha != "" {
+		body["captcha"] = captcha
+	}
+	_, err = s.client.R().
+		SetHeaderVerbatim("X-Oauth-Access-Token", token).
+		SetHeaderVerbatim("Referer", "https://www.dedao.cn/").
+		SetHeaderVerbatim("Accept-Language", "zh-CN").
+		SetBody(body).
+		SetResult(&resp).
+		Post("/oauth/api/embedded/auth_code/send")
+	return
+}
+
+// reqSendSMSCodeWithCaptcha 发送短信验证码（带易盾 validate token 重发）
+func (s *Service) reqSendSMSCodeWithCaptcha(token, phone, captchaToken string) (resp *AuthCodeSendResp, err error) {
+	return s.reqSendSMSCode(token, phone, captchaToken)
+}
+
+// AuthCodeCheckResp 验证短信验证码响应
+type AuthCodeCheckResp struct {
+	ErrCode int    `json:"errCode"`
+	ErrMsg  string `json:"errMsg"`
+}
+
+// reqPhoneLogin 手机号+验证码登录（校验验证码并写入登录态）
+// token: X-Oauth-Access-Token from /loginapi/getAccessToken，必须与发送验证码时使用同一个 token
+// 真实站点端点为 /oauth/api/embedded/auth_code/only_check
+func (s *Service) reqPhoneLogin(token, code string) (cookie string, err error) {
+	var result AuthCodeCheckResp
+	resp, err := s.client.R().
+		SetHeaderVerbatim("X-Oauth-Access-Token", token).
+		SetHeaderVerbatim("Referer", "https://www.dedao.cn/").
+		SetHeaderVerbatim("Origin", "https://www.dedao.cn").
+		SetBody(map[string]interface{}{
+			"code":           code,
+			"autoRegister":   true,
+			"withUser":       false,
+			"channelType":    "iget_web",
+			"channelSubtype": "",
+		}).
+		SetResult(&result).
+		Post("/oauth/api/embedded/auth_code/only_check")
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("验证码登录请求失败: HTTP %d", resp.StatusCode())
+	}
+	if result.ErrCode != 0 {
+		message := strings.TrimSpace(result.ErrMsg)
+		if message == "" {
+			message = fmt.Sprintf("错误码 %d", result.ErrCode)
+		}
+		return "", fmt.Errorf("验证码登录失败: %s", message)
+	}
+	cookies := resp.Header().Values("Set-Cookie")
+	cookie = strings.Join(cookies, "; ")
+	if cookie == "" {
+		return "", fmt.Errorf("验证码登录成功但未返回登录凭证")
+	}
+	return cookie, nil
+}
+
 // reqUser 请求用户信息
 func (s *Service) reqUser() (io.ReadCloser, error) {
 	resp, err := s.client.R().Get("/api/pc/user/info")

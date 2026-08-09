@@ -158,8 +158,16 @@ export function OpenFileDialog(arg1) {
   return window['go']['backend']['App']['OpenFileDialog'](arg1);
 }
 
+export function OpenLoginBrowser() {
+  return window['go']['backend']['App']['OpenLoginBrowser']();
+}
+
 export function OutsideDetail(arg1) {
   return window['go']['backend']['App']['OutsideDetail'](arg1);
+}
+
+export function PhoneLogin(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['PhoneLogin'](arg1, arg2, arg3);
 }
 
 export function SearchAll(arg1, arg2, arg3) {
@@ -172,6 +180,14 @@ export function SearchCourse(arg1, arg2, arg3) {
 
 export function SearchHot() {
   return window['go']['backend']['App']['SearchHot']();
+}
+
+export function SendPhoneCode(arg1) {
+  return window['go']['backend']['App']['SendPhoneCode'](arg1);
+}
+
+export function SendPhoneCodeWithCaptcha(arg1, arg2) {
+  return window['go']['backend']['App']['SendPhoneCodeWithCaptcha'](arg1, arg2);
 }
 
 export function SetDir(arg1) {

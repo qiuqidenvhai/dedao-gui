@@ -220,6 +220,9 @@ func (c *ConfigsData) DeleteConfigFile() (err error) {
 	}
 	c.fileMu.Unlock()
 	err = os.Remove(c.configFilePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	return
 }
 
@@ -309,6 +312,11 @@ func (c *ConfigsData) ActiveUser() *Dedao {
 func (c *ConfigsData) setActiveUser(u *Dedao) {
 	c.AcitveUID = u.UIDHazy
 	c.activeUser = u
+	// 关键：切换/设置活跃用户时，重置缓存的 service。
+	// 否则 getService() 仍返回登录前创建的旧实例（空 cookie），
+	// 导致登录成功后 UserInfo/EbookUserInfo 等接口继续用旧 cookie 请求，
+	// 返回空数据或 401（表现为主程序“登录了但资料全空”）。
+	c.service = nil
 }
 
 // LoginUserCount 登录用户数量

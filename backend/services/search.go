@@ -215,10 +215,80 @@ func (s *Service) SearchProducts(keyword string, productType int, page, pageSize
 	return result, nil
 }
 
-// SearchAll 统一搜索（课程、电子书、听书等）
+// SearchAll 统一搜索（课程、电子书、听书等）+ 向日葵大厅数据兜底
 func (s *Service) SearchAll(keyword string, page, pageSize int) (result *SearchResult, err error) {
-	// 使用新的 suggest API
-	return s.SearchSuggest(keyword, page, pageSize)
+	// 1. 优先调用 suggest API（通用搜索建议）
+	result, err = s.SearchSuggest(keyword, page, pageSize)
+	if err != nil || result == nil || len(result.List) == 0 {
+		// 2. suggest 没有结果或失败，用向日葵大厅数据兜底搜索
+		var hallResult []Course
+		hallResult, err = s.HallSearch(keyword, pageSize)
+		if err == nil && len(hallResult) > 0 {
+			result = &SearchResult{List: hallResult, Total: len(hallResult)}
+		} else {
+			// 都失败时返回空列表而不是报错
+			if result == nil {
+				result = &SearchResult{List: []Course{}, Total: 0}
+			}
+			err = nil
+		}
+	}
+	return
+}
+
+// HallSearch 从向日葵大厅搜索产品，作为搜索兜底源
+// nType: 2-电子书、4-课程、8-听书
+func (s *Service) HallSearch(keyword string, limit int) ([]Course, error) {
+	nTypes := []int{2, 4, 8}
+	var allResults []Course
+
+	for _, nType := range nTypes {
+		if len(allResults) >= limit {
+			break
+		}
+		labelList, err := s.SunflowerLabelList(nType)
+		if err != nil {
+			continue
+		}
+		for _, nav := range labelList.List {
+			if len(allResults) >= limit {
+				break
+			}
+			content, err := s.SunflowerLabelContent(nav.Enid, nType, 0, 10)
+			if err != nil {
+				continue
+			}
+			for _, prod := range content.ProductList {
+				if len(allResults) >= limit {
+					break
+				}
+				if strings.Contains(prod.Title, keyword) || strings.Contains(prod.Intro, keyword) {
+					// pType 和 classType 映射：2=电子书, 4=课程, 8=听书
+					var pType, classType int
+					switch nType {
+					case 2:
+						pType = 2; classType = 13
+					case 8:
+						pType = 3; classType = 14
+					default: // 4=课程
+						pType = 66; classType = 1
+					}
+					allResults = append(allResults, Course{
+						ID:          0,
+						Enid:        prod.ProductEnid,
+						Type:        pType,
+						ClassType:   classType,
+						Title:       prod.Title,
+						Intro:       prod.Intro,
+						Author:      strings.Join(prod.AuthorList, ","),
+						Icon:        prod.IndexImage,
+						IsCollected: false,
+					})
+				}
+			}
+		}
+	}
+	return allResults, nil
 }
 
 // SearchEbook 搜索电子书

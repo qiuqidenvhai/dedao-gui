@@ -17,6 +17,13 @@ type Dedao struct {
 	services.CookieOptions
 }
 
+// WeChatConfig 微信配置
+type WeChatConfig struct {
+	AppID       string `json:"app_id"`
+	AppSecret   string `json:"app_secret"`
+	RedirectURI string `json:"redirect_uri"`
+}
+
 // New dedao service
 func (d *Dedao) New() *services.Service {
 	return services.NewService(&d.CookieOptions)

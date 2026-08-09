@@ -83,13 +83,21 @@ export function OpenDirectoryDialog(arg1:string):Promise<string>;
 
 export function OpenFileDialog(arg1:string):Promise<string>;
 
+export function OpenLoginBrowser():Promise<void>;
+
 export function OutsideDetail(arg1:string):Promise<services.OutsideDetail>;
+
+export function PhoneLogin(arg1:string,arg2:string,arg3:string):Promise<services.PhoneLoginResp>;
 
 export function SearchAll(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
 
 export function SearchCourse(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
 
 export function SearchHot():Promise<services.SearchTot>;
+
+export function SendPhoneCode(arg1:string):Promise<backend.PhoneCodeResult>;
+
+export function SendPhoneCodeWithCaptcha(arg1:string,arg2:string):Promise<backend.PhoneCodeResult>;
 
 export function SetDir(arg1:Array<string>):Promise<void>;
 

@@ -1,8 +1,6 @@
 module github.com/yann0917/dedao-gui
 
-go 1.23.0
-
-toolchain go1.23.7
+go 1.23.4
 
 require (
 	github.com/JoshVarga/svgparser v0.0.0-20200804023048-5eaba627a7d1
@@ -17,6 +15,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/wailsapp/wails/v2 v2.11.0
+	github.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6
 	golang.org/x/sync v0.12.0
 )
 
@@ -65,3 +64,6 @@ require (
 	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
+
+// 本地 fork：为 webview_go 增加原生读取 HttpOnly Cookie 的能力（登录态检测用）
+replace github.com/webview/webview_go => ./third_party/webview_go

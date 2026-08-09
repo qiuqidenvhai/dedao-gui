@@ -221,16 +221,15 @@ const router = createRouter({
 });
 
 
-// router.beforeEach(async (to, from, next) => {
-//     // ✅ 这样做是可行的，因为路由器在安装完之后就会开始导航。
-//     // Pinia 也将被安装。
-//     const store = userStore()
-//     if (to.name !=="login" && to.meta.requiresAuth && !store.user?.nickname) {
-//         next( {path:'/user/login'})
-//     } else {
-//         next()
-//     }
-//   })
+// 全局前置守卫：未登录用户访问需要登录的页面时跳转到登录页
+router.beforeEach((to, from, next) => {
+    const store = userStore()
+    if (to.meta?.requiresAuth && !store.user?.nickname) {
+        next({ path: '/user/login', query: { redirect: to.fullPath } })
+    } else {
+        next()
+    }
+})
 
   // 全局解析守卫 它在每次导航时都会触发，但是确保在导航被确认之前，同时在所有组件内守卫和异步路由组件被解析之后，解析守卫就被正确调用。
   router.beforeResolve(async to => {
