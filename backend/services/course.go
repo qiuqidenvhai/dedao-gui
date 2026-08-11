@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"math"
+	"strings"
 )
 
 // Course metadata
@@ -62,6 +63,7 @@ type Course struct {
 	GroupType        int              `json:"group_type"`
 	LabelID          int              `json:"label_id"`
 	GroupBooks       []GroupBook      `json:"group_books,omitempty"`
+	IsBuy            bool             `json:"is_buy"` // 是否已购买（搜索结果中返回）
 }
 
 type GroupBook struct {
@@ -698,6 +700,150 @@ func (s *Service) CourseInfo(enid string) (info *CourseInfo, err error) {
 		return
 	}
 	return
+}
+
+// ProductInfo 统一商品详情：课程 / 电子书 / 听书 依次尝试，归一化为 CourseInfo。
+//
+// 为什么要这个：底层 CourseInfo(enid) 只能解析「课程」的 enid；
+// 普通搜索 / 大厅搜出来的电子书、听书用课程的详情接口会直接返回「服务异常」。
+// 这里按 课程 → 电子书 → 听书 的顺序兜底，保证任意类型点开预览都能正常渲染，
+// 不再出现「普通搜索预览报服务器异常、大厅却能预览」的不一致。
+func (s *Service) ProductInfo(enid string) (info *CourseInfo, err error) {
+	if enid == "" {
+		return nil, errors.New("enid 为空")
+	}
+
+	tryEbook := func() *CourseInfo {
+		// 注意：EbookDetail.Title 实测恒为空串，真实书名在 operating_title / other_share_title，
+		// 所以这里必须用 ebookTitle() 判断，不能用 ebook.Title != ""（否则电子书永远走不到）。
+		if ebook, eerr := s.EbookDetail(enid); eerr == nil && ebook != nil && ebookTitle(ebook) != "" {
+			return ebookToCourseInfo(ebook)
+		}
+		return nil
+	}
+	tryOdob := func() *CourseInfo {
+		if odob, oerr := s.AudioDetail(enid); oerr == nil && odob != nil && odob.AudioInfo.Title != "" {
+			return odobToCourseInfo(odob)
+		}
+		return nil
+	}
+
+	// 快速分流：电子书 enid 是 64 位长串，课程/听书是 30~40 位。
+	// 先试对的那个 —— 电子书详情接口对短 enid 会返回 400 并触发 3 次重试（~9 秒），
+	// 分流后就不会再白等这 9 秒了。
+	if len(enid) >= 60 {
+		if ci := tryEbook(); ci != nil {
+			return ci, nil
+		}
+	}
+
+	// 1. 课程（大厅/已购绝大多数是课程）
+	info, err = s.CourseInfo(enid)
+	if err == nil && info != nil && info.ClassInfo.Enid != "" {
+		return info, nil
+	}
+
+	// 2. 听书
+	if ci := tryOdob(); ci != nil {
+		return ci, nil
+	}
+
+	// 3. 电子书（长 enid 前面已试过，这里只兜底短 enid 的异常情况）
+	if len(enid) < 60 {
+		if ci := tryEbook(); ci != nil {
+			return ci, nil
+		}
+	}
+
+	// 全部失败：返回课程的原始错误（最贴近「商品不存在」语义）
+	if err != nil {
+		return nil, err
+	}
+	return nil, errors.New("未找到该商品详情")
+}
+
+// ebookTitle 取电子书真实书名。
+// 实测 /pc/ebook2/v1/pc/detail 返回的 title 恒为空串，真实书名在 operating_title，
+// 少数书只有 other_share_title。
+func ebookTitle(e *EbookDetail) string {
+	if e == nil {
+		return ""
+	}
+	for _, t := range []string{e.OperatingTitle, e.OtherShareTitle, e.Title} {
+		if strings.TrimSpace(t) != "" {
+			return strings.TrimSpace(t)
+		}
+	}
+	return ""
+}
+
+// ebookToCourseInfo 把电子书详情归一化成 CourseInfo（仅填充预览弹窗用得到的字段）
+func ebookToCourseInfo(e *EbookDetail) *CourseInfo {
+	author := strings.Join(e.AuthorList, ", ")
+	if author == "" {
+		author = e.BookAuthor
+	}
+	ci := &CourseInfo{
+		ClassInfo: ClassInfo{
+			Enid:           e.Enid,
+			Name:           ebookTitle(e),
+			Intro:          e.BookIntro,
+			ProductType:    ProductTypeEbook,
+			LecturerName:   author,
+			LecturerIntro:  e.AuthorInfo,
+			PhaseNum:       e.Count,
+			PriceDesc:      e.CurrentPrice,
+			IsFinished:     1,
+			Highlight:      e.OtherShareSummary,
+			LearnUserCount: 0,
+			IndexImg:       e.Cover,
+			Logo:           e.Cover,
+			LogType:        "ebook",
+			// is_on_bookshelf -> 前端「加入书架」按钮的初始状态
+			Collection: Collection{IsCollected: e.IsOnBookshelf},
+		},
+		ClassCommentInfo: ClassCommentInfo{
+			Count:        0,
+			AverageScore: e.ProductScore,
+		},
+	}
+	if e.IsBuy {
+		ci.ClassInfo.IsSubscribe = 1
+	}
+	return ci
+}
+
+// odobToCourseInfo 把听书详情归一化成 CourseInfo（仅填充预览弹窗用得到的字段）
+//
+// 注意 ProductType 必须是 13（听书），历史代码写 3 是错的 ——
+// 前端拿 3 去调加书架会走到电子书接口，必然失败。
+func odobToCourseInfo(a *AudioInfoResp) *CourseInfo {
+	ci := &CourseInfo{
+		ClassInfo: ClassInfo{
+			// 听书加书架必须用 audio_id（不是搜索结果里的 extra.token）
+			Enid:           a.AudioInfo.AudioID,
+			Name:           a.AudioInfo.Title,
+			Intro:          a.AudioInfo.AudioSummary,
+			ProductType:    ProductTypeOdob,
+			LecturerName:   a.AudioInfo.AgencyDetail.Name,
+			LecturerIntro:  a.AudioInfo.AgencyDetail.Intro,
+			LecturerAvatar: a.AudioInfo.AgencyDetail.QcgMemberAvatar,
+			PriceDesc:      a.AudioInfo.AudioPrice,
+			IndexImg:       a.AudioInfo.Icon,
+			Logo:           a.AudioInfo.Icon,
+			LogType:        "odob",
+			LearnUserCount: a.AudioInfo.LearnCount,
+			// in_bookrack -> 前端「加入书架」按钮的初始状态
+			Collection: Collection{IsCollected: a.AudioInfo.InBookrack},
+		},
+		ClassCommentInfo: ClassCommentInfo{
+			Count: 0,
+		},
+	}
+	if a.AudioInfo.IsBuy {
+		ci.ClassInfo.IsSubscribe = 1
+	}
+	return ci
 }
 
 // HasAudio include audio

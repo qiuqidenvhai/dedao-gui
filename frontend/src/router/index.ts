@@ -216,6 +216,15 @@ const router = createRouter({
                     },
                 },
             ],
+        },
+        {
+            // 大厅搜索结果页（独立页面，区别于「我的课程」普通搜索格式）
+            path: "/hall",
+            name: "hall",
+            component: () => import("../views/Hall.vue"),
+            meta: {
+                name: "大厅搜索", hideMenu: true, requiresAuth: false
+            },
         }
     ],
 });

@@ -448,24 +448,25 @@ func (s *Service) reqEbookCommentList(enid, sort string, page, limit int) (io.Re
 }
 
 // reqEbookDetail 请求电子书加入书架
+// 注意：相对 baseURL(www.dedao.cn) 拼接，不能带 /api 前缀（带前缀会 401）。
 func (s *Service) reqEbookShelfAdd(enIds []string) (io.ReadCloser, error) {
 	resp, err := s.client.R().
 		SetBody(map[string]interface{}{
 			"book_enids": enIds,
 		}).
-		Post("/api/pc/ebook2/v1/bookshelf/add")
+		Post("pc/ebook2/v1/bookshelf/add")
 
 	return handleHTTPResponse(resp, err)
 }
 
 // reqEbookDetail 请求电子书移出书架
+// 走 pc/ebook2/v1/bookshelf/remove（book_enids），与 AddToShelf 统一。
 func (s *Service) reqEbookShelfRemove(ids []string) (io.ReadCloser, error) {
 	resp, err := s.client.R().
 		SetBody(map[string]interface{}{
-			"pids":  ids,
-			"ptype": 2,
+			"book_enids": ids,
 		}).
-		Post("/api/pc/hades/v1/product/remove")
+		Post("pc/ebook2/v1/bookshelf/remove")
 
 	return handleHTTPResponse(resp, err)
 }
@@ -633,10 +634,13 @@ func (s *Service) reqSunflowerLabelList(nType int) (io.ReadCloser, error) {
 // nType 2-好看又好查的电子书, 4-精选课程
 func (s *Service) reqSunflowerLabelContent(enID string, nType, page, pageSize int) (io.ReadCloser, error) {
 	var resType string
-	if nType == 2 {
+	switch nType {
+	case 2: // 电子书
 		resType = "2"
-	} else if nType == 4 {
+	case 4: // 课程
 		resType = "66"
+	case 8: // 听书：result_type 必须是 13，留空会返回空 product_list
+		resType = "13"
 	}
 	resp, err := s.client.R().
 		SetBody(map[string]interface{}{

@@ -81,7 +81,7 @@ func main() {
 				HideToolbarSeparator:       true,
 			},
 			Appearance:           mac.DefaultAppearance,
-			WebviewIsTransparent: true,
+			WebviewIsTransparent: false,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
 				Title:   "dedao gui downloader",
@@ -93,7 +93,7 @@ func main() {
 			Icon: icon,
 		},
 		Debug: options.Debug{
-			OpenInspectorOnStartup: false,
+			OpenInspectorOnStartup: true,
 		},
 	})
 

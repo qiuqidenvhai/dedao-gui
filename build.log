@@ -1,3 +1,0 @@
-# github.com/yann0917/dedao-gui/backend/services
-backend\services\requester.go:30:51: undefined: QrCodeResp
-backend\services\requester.go:47:63: undefined: CheckLoginResp

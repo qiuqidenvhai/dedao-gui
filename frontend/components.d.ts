@@ -67,6 +67,7 @@ declare module 'vue' {
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     GlobalAudioPlayer: typeof import('./src/components/GlobalAudioPlayer.vue')['default']
     GlobalSearch: typeof import('./src/components/GlobalSearch.vue')['default']
+    HallSearch: typeof import('./src/components/HallSearch.vue')['default']
     Menu: typeof import('./src/components/Menu.vue')['default']
     MenuItem: typeof import('./src/components/MenuItem.vue')['default']
     NotesItem: typeof import('./src/components/NotesItem.vue')['default']

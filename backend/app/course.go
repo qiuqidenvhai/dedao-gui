@@ -50,6 +50,16 @@ func CourseInfoByEnid(enID string) (info *services.CourseInfo, err error) {
 	return
 }
 
+// ProductInfo 统一商品详情（课程 / 电子书 / 听书），归一化为 CourseInfo。
+// 前端预览只调这一个，避免「电子书/听书 enid 传给课程接口报服务器异常」的问题。
+func ProductInfo(enID string) (info *services.CourseInfo, err error) {
+	info, err = getService().ProductInfo(enID)
+	if err != nil {
+		return
+	}
+	return
+}
+
 // OutsideDetail 名家讲书课程详情
 func OutsideDetail(enid string) (detail *services.OutsideDetail, err error) {
 	detail, err = getService().OutsideDetail(enid)

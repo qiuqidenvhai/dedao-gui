@@ -5,6 +5,8 @@ import {backend} from '../models';
 import {app} from '../models';
 import {options} from '../models';
 
+export function AddToShelf(arg1:string,arg2:number):Promise<services.ShelfResult>;
+
 export function AlgoFilter(arg1:services.AlgoFilterParam):Promise<services.AlgoFilterResp>;
 
 export function AlgoProduct(arg1:services.AlgoFilterParam):Promise<services.AlgoProductResp>;
@@ -67,6 +69,10 @@ export function GetVolcPlayAuthToken(arg1:string,arg2:string):Promise<services.M
 
 export function GetVolcPlayInfo(arg1:string):Promise<services.VodPlayInfoResp>;
 
+export function HallCacheStatus():Promise<services.HallCacheState>;
+
+export function HallSearch(arg1:string,arg2:number):Promise<Array<services.Course>>;
+
 export function Logout():Promise<void>;
 
 export function NotesTimeline(arg1:string):Promise<services.NotesTimeline>;
@@ -89,11 +95,21 @@ export function OutsideDetail(arg1:string):Promise<services.OutsideDetail>;
 
 export function PhoneLogin(arg1:string,arg2:string,arg3:string):Promise<services.PhoneLoginResp>;
 
+export function ProductInfo(arg1:string):Promise<services.CourseInfo>;
+
+export function RefreshHallCache():Promise<void>;
+
+export function RemoveFromShelf(arg1:string,arg2:number):Promise<services.ShelfResult>;
+
 export function SearchAll(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
 
 export function SearchCourse(arg1:string,arg2:number,arg3:number):Promise<services.SearchResult>;
 
 export function SearchHot():Promise<services.SearchTot>;
+
+export function SearchProducts(arg1:string,arg2:number):Promise<services.SearchResult>;
+
+export function SearchProductsByType(arg1:string,arg2:number,arg3:number,arg4:number):Promise<services.SearchResult>;
 
 export function SendPhoneCode(arg1:string):Promise<backend.PhoneCodeResult>;
 

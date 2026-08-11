@@ -8,8 +8,9 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { themeStore } from './stores/theme'
 import { settingStore } from './stores/setting'
 import { playerStore } from './stores/player'
-import { AudioDetailAlias } from '../wailsjs/go/backend/App'
+import { AudioDetailAlias, RefreshHallCache } from '../wailsjs/go/backend/App'
 import { setFontFamily } from './utils/utils'
+import { userStore } from './stores/user'
 
 // 初始化主题
 const store = themeStore()
@@ -17,6 +18,10 @@ const sStore = settingStore()
 onMounted(() => {
   store.initTheme()
   setFontFamily(sStore.setting.fontFamily || 'default')
+  // 已登录则后台刷新大厅商品缓存（每次重新打开 App 各一次，搜索时直接读内存）
+  if (userStore().user) {
+    RefreshHallCache()
+  }
 })
 
 const pStore = playerStore()

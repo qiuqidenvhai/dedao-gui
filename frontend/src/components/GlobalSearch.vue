@@ -224,11 +224,11 @@ const handleSelect = (item: any) => {
   searchKeyword.value = ''
 }
 
-// 处理回车 - 跳转到课程搜索页面（带回填关键词）
+// 处理回车 - 跳转到大厅结果页（统一的搜索结果视图，带回填关键词）
 const handleEnter = () => {
   if (searchKeyword.value.trim()) {
     router.push({
-      path: '/bought/course',
+      path: '/hall',
       query: { keyword: searchKeyword.value.trim() }
     })
   }

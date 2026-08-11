@@ -101,7 +101,7 @@
                         <!-- 悬停遮罩层 (仅非分组显示操作) -->
                         <div v-if="!item.is_group" class="card-overlay" @click.stop>
                             <div class="overlay-actions">
-                                <el-button circle type="primary" :icon="View" @click="handleProd(item.enid)" title="详情" />
+                                <el-button circle type="primary" :icon="View" @click="handleProd(item)" title="详情" />
                                 <el-button circle type="success" :icon="Download" @click="openDownloadDialog(item)" title="下载" />
                             </div>
                         </div>
@@ -140,7 +140,7 @@
     </div>
 
 
-    <course-info v-if="dialogVisible" :enid= "prodEnid" :dialog-visible="dialogVisible" @close="closeDialog"></course-info>
+    <course-info v-if="dialogVisible" :enid="prodEnid" :product-type="prodType" :dialog-visible="dialogVisible" @close="closeDialog"></course-info>
     <download-dialog
         v-if="dialogDownloadVisible"
         :dialog-visible="dialogDownloadVisible"
@@ -156,10 +156,10 @@
   
 <script lang="ts" setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Download, Picture, Folder } from '@element-plus/icons-vue'
-import {CourseList, CourseCategory, CourseGroupList, SetDir, GetNavbar, SearchCourse} from '../../wailsjs/go/backend/App'
+import {CourseList, CourseCategory, CourseGroupList, SetDir, GetNavbar, SearchAll} from '../../wailsjs/go/backend/App'
 import { services } from '../../wailsjs/go/models'
 import { userStore } from '../stores/user';
 import { settingStore } from '../stores/setting';
@@ -194,6 +194,8 @@ const isIndeterminate = ref(false)
 
 const dialogVisible = ref(false)
 const prodEnid = ref("")
+// 详情弹窗的商品类型（2 电子书 / 13 听书 / 66 课程），决定「加入书架」走哪个接口
+const prodType = ref(0)
 
 
 const groupMode = reactive({
@@ -258,6 +260,23 @@ onMounted(async () => {
 })
 
 
+// 路由参数/查询变化守卫：从搜索结果页再次搜索时，Vue Router 会复用同一组件，
+// onMounted 不会重跑。onBeforeRouteUpdate 是处理「query 变化触发刷新」的最可靠方式
+// （比 watch(route.query.keyword) 稳，rourse.query 在某些场景下 watch 不触发）。
+// 否则表现为「只能在主页搜索、搜到后马上改词不跳转/不刷新」「大厅搜索点了没反应」。
+onBeforeRouteUpdate((to, from) => {
+    const kw = (to.query.keyword as string) || ''
+    if (kw === searchKeyword.value) return
+    searchKeyword.value = kw
+    page.value = 1
+    groupMode.active = false
+    groupMode.groupId = 0
+    groupMode.title = ''
+    currentFilter.value = 'all'
+    tableData.list = []
+    getTableData()
+})
+
 const noMore = computed(() => {
     const currentCount = tableData.list ? tableData.list.length : 0
     // 搜索模式或分组模式或筛选模式
@@ -308,10 +327,10 @@ const getTableData = async (append = false) => {
     
     let fetcher;
     
-    // 如果有搜索关键词，使用搜索API
+    // 如果有搜索关键词，使用统一搜索API（suggest 无结果时自动 HallSearch 兜底）
     if (searchKeyword.value) {
         console.log('Searching with keyword:', searchKeyword.value)
-        fetcher = SearchCourse(searchKeyword.value, page.value, pageSize.value)
+        fetcher = SearchAll(searchKeyword.value, page.value, pageSize.value)
     } else if (groupMode.active) {
         fetcher = CourseGroupList("bauhinia", "study", currentFilter.value,groupMode.groupId, page.value, pageSize.value)
     } else {
@@ -353,9 +372,6 @@ const getTableData = async (append = false) => {
 }
 
 
-getTableData()
-
-
 // 清除搜索，返回列表
 const clearSearch = () => {
     searchKeyword.value = ''
@@ -365,13 +381,31 @@ const clearSearch = () => {
 }
 
 
-const handleProd = (enid:string)=>{
-  prodEnid.value = enid
-  dialogVisible.value = true
+// 商品类型归一化：2 电子书 / 13 听书 / 66 课程（听书历史上有 3、13 两种取值）
+const normProdType = (t: any): number => {
+    const n = Number(t)
+    if (n === 2) return 2
+    if (n === 3 || n === 13) return 13
+    return 66
+}
+
+const handleProd = (row: any) => {
+    const enid = typeof row === 'string' ? row : (row?.enid || '')
+    if (!enid) return
+    prodEnid.value = enid
+    prodType.value = typeof row === 'string' ? 0 : normProdType(row?.type)
+    dialogVisible.value = true
 }
 
 
 const gotoArticleList = (row: any) => {
+    // 搜索结果里的电子书 / 听书没有「文章列表」，点开直接走详情预览，
+    // 否则会跳到一个必然报错的课程详情页。
+    const t = normProdType(row?.type)
+    if (t !== 66 || !row?.id) {
+        handleProd(row)
+        return
+    }
     pushCourseDetail(row.id, {
         enid: row.enid,
         total: row.publish_num,

@@ -2786,7 +2786,8 @@ export namespace services {
 	    group_type: number;
 	    label_id: number;
 	    group_books?: GroupBook[];
-	
+	    is_buy: boolean;
+
 	    static createFrom(source: any = {}) {
 	        return new Course(source);
 	    }
@@ -2848,6 +2849,7 @@ export namespace services {
 	        this.group_type = source["group_type"];
 	        this.label_id = source["label_id"];
 	        this.group_books = this.convertValues(source["group_books"], GroupBook);
+	        this.is_buy = source["is_buy"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3372,6 +3374,20 @@ export namespace services {
 	        this.hotType = source["hotType"];
 	        this.log_id = source["log_id"];
 	        this.log_type = source["log_type"];
+	    }
+	}
+	export class HallCacheState {
+	    loaded: boolean;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HallCacheState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.loaded = source["loaded"];
+	        this.size = source["size"];
 	    }
 	}
 	export class Label {
@@ -4961,6 +4977,8 @@ export namespace services {
 	
 	
 	export class ProductSimple {
+	    id: number;
+	    product_id: number;
 	    product_type: number;
 	    product_enid: string;
 	    title: string;
@@ -4981,6 +4999,8 @@ export namespace services {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.product_id = source["product_id"];
 	        this.product_type = source["product_type"];
 	        this.product_enid = source["product_enid"];
 	        this.title = source["title"];
@@ -5134,6 +5154,22 @@ export namespace services {
 		}
 	}
 	
+	export class ShelfResult {
+	    ok: boolean;
+	    message: string;
+	    kind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShelfResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.message = source["message"];
+	        this.kind = source["kind"];
+	    }
+	}
 	
 	export class SunflowerContent {
 	    product_list: ProductSimple[];

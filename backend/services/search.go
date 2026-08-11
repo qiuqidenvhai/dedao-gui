@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/yann0917/dedao-gui/backend/utils"
 )
@@ -112,19 +114,18 @@ func (s *Service) SearchSuggest(keyword string, page, pageSize int) (result *Sea
 	var courses []Course
 	for _, sl := range outer.List {
 		for _, item := range sl.List {
-			// 确定产品类型：2=电子书，3=听书，其他=课程
+			// 确定产品类型（服务端真实取值：电子书 2 / 听书 13 / 课程 66）
+			// 注意 suggest 返回的 item.Type 里听书是 3，需要映射成真实的 13，
+			// 否则详情、加书架都会走错接口。
 			var classType int
 			var pType int
 			switch item.Type {
 			case 2:
-				classType = 13 // 电子书类型
-				pType = 2
-			case 3:
-				classType = 14 // 听书类型
-				pType = 3
+				pType, classType = ProductTypeEbook, ProductTypeEbook
+			case 3, 13:
+				pType, classType = ProductTypeOdob, ProductTypeOdob
 			default:
-				classType = 66 // 课程
-				pType = 66
+				pType, classType = ProductTypeCourse, ProductTypeCourse
 			}
 
 			// 去掉 title 中的 <hl> 标签
@@ -158,9 +159,17 @@ func (s *Service) SearchSuggest(keyword string, page, pageSize int) (result *Sea
 	return result, nil
 }
 
-// SearchCourse 搜索课程
+// SearchCourse 搜索课程。
+// 走正式分页搜索接口 /api/search/v2/pc/searchclass（suggest 每 tab 只回 2 条，不能用）。
 func (s *Service) SearchCourse(keyword string, page, pageSize int) (result *SearchResult, err error) {
-	// 使用新的 suggest API
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	result, err = s.SearchCourseV2(keyword, page, pageSize)
+	if err == nil && result != nil {
+		return result, nil
+	}
+	// 正式接口异常时退回 suggest，至少还能出两条
 	return s.SearchSuggest(keyword, page, pageSize)
 }
 
@@ -215,65 +224,193 @@ func (s *Service) SearchProducts(keyword string, productType int, page, pageSize
 	return result, nil
 }
 
-// SearchAll 统一搜索（课程、电子书、听书等）+ 向日葵大厅数据兜底
+// SearchAll 统一搜索（课程 + 听书 + 电子书三路并发合并）。
+//
+// 2026-08-10 重写：原来走 /api/search/pc/suggest（搜索框联想接口），
+// 每个 tab 最多只回 2 条 —— 这就是「一个关键词只搜出一两条 / 只有听书」的根因。
+// 现在走 dedao.cn 搜索结果页真正用的三个分页接口（见 search_v2.go），
+// 结果完整、带真实 total、enid 一定有效（能正常预览）。
 func (s *Service) SearchAll(keyword string, page, pageSize int) (result *SearchResult, err error) {
-	// 1. 优先调用 suggest API（通用搜索建议）
-	result, err = s.SearchSuggest(keyword, page, pageSize)
-	if err != nil || result == nil || len(result.List) == 0 {
-		// 2. suggest 没有结果或失败，用向日葵大厅数据兜底搜索
-		var hallResult []Course
-		hallResult, err = s.HallSearch(keyword, pageSize)
-		if err == nil && len(hallResult) > 0 {
-			result = &SearchResult{List: hallResult, Total: len(hallResult)}
-		} else {
-			// 都失败时返回空列表而不是报错
-			if result == nil {
-				result = &SearchResult{List: []Course{}, Total: 0}
-			}
-			err = nil
+	kw := strings.TrimSpace(keyword)
+	if kw == "" {
+		return &SearchResult{List: []Course{}, Total: 0}, nil
+	}
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+
+	// 1. 主路径：真·全站搜索（三接口并发，支持翻页）
+	result, err = s.SearchProductsAllPaged(kw, page, pageSize)
+	if err == nil && result != nil && len(result.List) > 0 {
+		return result, nil
+	}
+
+	// 翻到第 2 页以后没数据就是真到底了，不要再用 suggest / 缓存兜底，
+	// 否则前端「加载更多」会把第 1 页的东西又追加一遍。
+	if page > 1 {
+		return &SearchResult{List: []Course{}, Total: 0}, nil
+	}
+
+	// 2. 兜底一：suggest（虽只有 2 条，但总比空好）
+	if r2, e2 := s.SearchSuggest(kw, page, pageSize); e2 == nil && r2 != nil && len(r2.List) > 0 {
+		return r2, nil
+	}
+
+	// 3. 兜底二：本地大厅缓存
+	if GlobalHallCache.IsLoaded() {
+		if res := GlobalHallCache.Search(kw, pageSize); len(res) > 0 {
+			return &SearchResult{List: res, Total: len(res)}, nil
 		}
 	}
-	return
+
+	return &SearchResult{List: []Course{}, Total: 0}, nil
 }
 
-// HallSearch 从向日葵大厅搜索产品，作为搜索兜底源
-// nType: 2-电子书、4-课程、8-听书
+// HallSearch 大厅检索（全站商品）。
+//
+// 2026-08-10 重写：以前靠「预加载向日葵目录到内存 + 子串匹配」，
+// 只能覆盖向日葵精选目录（约 7k 条），大量商品搜不到，而且类型判定也不准。
+// 现在直接用得到官方搜索结果页的三个分页接口（课程 / 听书 / 电子书，见 search_v2.go），
+// 一次并发拿齐三类，条数由 limit 决定 —— 结果完整，不会「只找到听书」。
+// 本地大厅缓存降级为补充：把官方搜索没覆盖到的本地命中项追加在后面。
 func (s *Service) HallSearch(keyword string, limit int) ([]Course, error) {
-	nTypes := []int{2, 4, 8}
-	var allResults []Course
+	kw := strings.TrimSpace(keyword)
+	if kw == "" {
+		return []Course{}, nil
+	}
+	if limit <= 0 {
+		limit = 150
+	}
 
-	for _, nType := range nTypes {
-		if len(allResults) >= limit {
+	// 每类取 limit/3（官方单页上限 100）
+	perType := limit / 3
+	if perType < 20 {
+		perType = 20
+	}
+	if perType > 100 {
+		perType = 100
+	}
+
+	var (
+		merged []Course
+		seen   = map[string]bool{}
+	)
+	appendUniq := func(list []Course) {
+		for _, c := range list {
+			if c.Enid == "" || seen[c.Enid] {
+				continue
+			}
+			seen[c.Enid] = true
+			merged = append(merged, c)
+		}
+	}
+
+	// 1. 主路径：官方全站搜索（课程 + 听书 + 电子书三路并发）
+	result, err := s.SearchProductsAll(kw, perType)
+	if err == nil && result != nil {
+		appendUniq(result.List)
+	}
+
+	// 2. 补充：本地大厅缓存里命中但官方搜索没返回的（向日葵专享位等）
+	if GlobalHallCache.IsLoaded() {
+		appendUniq(GlobalHallCache.Search(kw, limit))
+	} else {
+		// 缓存还没建好：只有在官方搜索也没结果时才现场扫一次向日葵，
+		// 同时触发后台预加载，下次就有缓存了。
+		if len(merged) == 0 {
+			if list, serr := s.hallScan(kw, limit); serr == nil {
+				appendUniq(list)
+			}
+		}
+		go GlobalHallCache.Load(s)
+	}
+
+	// 3. 都为空才认为失败
+	if len(merged) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		return []Course{}, nil
+	}
+	if len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged, nil
+}
+
+// hallScan 受控扫描向日葵大厅各分类导航的首页内容，在客户端做大小写无关包含匹配。
+// 仅作为 suggest 无结果时的兜底：并发 4 路、每个导航只取 1 页（50 条）、整体 8 秒超时。
+func (s *Service) hallScan(keyword string, limit int) ([]Course, error) {
+	kw := strings.ToLower(keyword)
+	deadline := time.Now().Add(8 * time.Second)
+
+	type job struct {
+		enid  string
+		nType int
+	}
+	var jobs []job
+	var listErr error
+	for _, nType := range []int{4, 2, 8} {
+		if time.Now().After(deadline) {
 			break
 		}
 		labelList, err := s.SunflowerLabelList(nType)
 		if err != nil {
+			listErr = err
 			continue
 		}
 		for _, nav := range labelList.List {
-			if len(allResults) >= limit {
-				break
-			}
-			content, err := s.SunflowerLabelContent(nav.Enid, nType, 0, 10)
-			if err != nil {
-				continue
-			}
-			for _, prod := range content.ProductList {
-				if len(allResults) >= limit {
-					break
+			jobs = append(jobs, job{enid: nav.Enid, nType: nType})
+		}
+	}
+	if len(jobs) == 0 {
+		return nil, listErr
+	}
+
+	const workers = 4
+	const pageSize = 50
+	var (
+		mu      sync.Mutex
+		results []Course
+		wg      sync.WaitGroup
+	)
+	ch := make(chan job)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range ch {
+				if time.Now().After(deadline) {
+					continue // 排空剩余任务，避免死锁
 				}
-				if strings.Contains(prod.Title, keyword) || strings.Contains(prod.Intro, keyword) {
-					// pType 和 classType 映射：2=电子书, 4=课程, 8=听书
-					var pType, classType int
-					switch nType {
-					case 2:
-						pType = 2; classType = 13
-					case 8:
-						pType = 3; classType = 14
-					default: // 4=课程
-						pType = 66; classType = 1
+				mu.Lock()
+				enough := len(results) >= limit
+				mu.Unlock()
+				if enough {
+					continue
+				}
+				content, err := s.SunflowerLabelContent(j.enid, j.nType, 0, pageSize)
+				if err != nil || content == nil {
+					continue
+				}
+				var matched []Course
+				for _, prod := range content.ProductList {
+					title := strings.ToLower(prod.Title)
+					intro := strings.ToLower(prod.Intro + " " + prod.Introduction)
+					if !strings.Contains(title, kw) && !strings.Contains(intro, kw) {
+						continue
 					}
-					allResults = append(allResults, Course{
+					var pType, classType int
+					switch j.nType {
+					case 2:
+						pType, classType = ProductTypeEbook, ProductTypeEbook
+					case 8:
+						pType, classType = ProductTypeOdob, ProductTypeOdob
+					default: // 4=课程
+						pType, classType = 66, 1
+					}
+					matched = append(matched, Course{
 						ID:          0,
 						Enid:        prod.ProductEnid,
 						Type:        pType,
@@ -285,15 +422,63 @@ func (s *Service) HallSearch(keyword string, limit int) ([]Course, error) {
 						IsCollected: false,
 					})
 				}
+				if len(matched) > 0 {
+					mu.Lock()
+					results = append(results, matched...)
+					mu.Unlock()
+				}
 			}
+		}()
+	}
+	for _, j := range jobs {
+		ch <- j
+	}
+	close(ch)
+	wg.Wait()
+
+	// 按 enid 去重
+	seen := make(map[string]bool, len(results))
+	var uniq []Course
+	for _, c := range results {
+		if c.Enid == "" || seen[c.Enid] {
+			continue
+		}
+		seen[c.Enid] = true
+		uniq = append(uniq, c)
+		if len(uniq) >= limit {
+			break
 		}
 	}
-	return allResults, nil
+	return uniq, nil
 }
 
-// SearchEbook 搜索电子书
+// SearchEbook 搜索电子书。走正式分页接口，异常时退回 suggest。
 func (s *Service) SearchEbook(keyword string, page, pageSize int) (result *SearchResult, err error) {
-	// 使用新的 suggest API，searchType=2 只返回电子书
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	result, err = s.SearchEbookV2(keyword, page, pageSize)
+	if err == nil && result != nil {
+		return result, nil
+	}
+	return s.searchEbookSuggest(keyword, page, pageSize)
+}
+
+// SearchOdob 搜索听书。走正式分页接口，异常时退回 suggest。
+func (s *Service) SearchOdob(keyword string, page, pageSize int) (result *SearchResult, err error) {
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	result, err = s.SearchOdobV2(keyword, page, pageSize)
+	if err == nil && result != nil {
+		return result, nil
+	}
+	return s.searchOdobSuggest(keyword, page, pageSize)
+}
+
+// searchEbookSuggest 旧的 suggest 版电子书搜索（每 tab 仅 2 条），仅作兜底
+func (s *Service) searchEbookSuggest(keyword string, page, pageSize int) (result *SearchResult, err error) {
+	// 使用 suggest API，searchType=2 只返回电子书
 	if keyword == "" {
 		return &SearchResult{List: []Course{}, Total: 0}, nil
 	}
@@ -371,9 +556,9 @@ func (s *Service) SearchEbook(keyword string, page, pageSize int) (result *Searc
 	return result, nil
 }
 
-// SearchOdob 搜索听书
-func (s *Service) SearchOdob(keyword string, page, pageSize int) (result *SearchResult, err error) {
-	// 使用新的 suggest API，searchType=3 只返回听书
+// searchOdobSuggest 旧的 suggest 版听书搜索（每 tab 仅 2 条），仅作兜底
+func (s *Service) searchOdobSuggest(keyword string, page, pageSize int) (result *SearchResult, err error) {
+	// 使用 suggest API，searchType=3 只返回听书
 	if keyword == "" {
 		return &SearchResult{List: []Course{}, Total: 0}, nil
 	}
@@ -431,8 +616,8 @@ func (s *Service) SearchOdob(keyword string, page, pageSize int) (result *Search
 			course := Course{
 				ID:          item.ID,
 				Enid:        item.Extra.Enid,
-				Type:        3,
-				ClassType:   14,
+				Type:        ProductTypeOdob,
+				ClassType:   ProductTypeOdob,
 				Title:       cleanTitle,
 				Intro:       cleanIntro,
 				Author:      item.Author,

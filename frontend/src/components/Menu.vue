@@ -1,7 +1,9 @@
 <template>
     <div class="menu-container">
-        <!-- 搜索框 -->
-        <GlobalSearch />
+        <!-- 搜索框（统一入口） -->
+        <div class="search-area">
+            <GlobalSearch />
+        </div>
 
         <el-menu router :default-active="activeIndex" class="el-menu" mode="horizontal"
              text-color="var(--text-primary)"
@@ -117,6 +119,13 @@ const handleSelect = (key: string, keyPath: string[]) => {
     align-items: center;
     justify-content: space-between;
     width: 100%;
+}
+
+.search-area {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 16px;
 }
 
 .right-area {

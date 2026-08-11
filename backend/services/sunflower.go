@@ -86,6 +86,8 @@ type SunflowerLabelList struct {
 	List []Navigation `json:"list"`
 }
 type ProductSimple struct {
+	Id              int      `json:"id"`
+	ProductId       int      `json:"product_id"`
 	ProductType     int      `json:"product_type"`
 	ProductEnid     string   `json:"product_enid"`
 	Title           string   `json:"title"`

@@ -35,8 +35,12 @@
                   <span class="price">{{ audioInfo.detail.audio_price }}元</span>
                   <el-tag class="ml-2" type="warning" v-if="audioInfo.detail.is_vip == true" round>
                     会员免费</el-tag>
-                  <el-tag class="ml-2" type="info" v-if="audioInfo.detail.in_bookrack == true" round>
-                    已加入书架</el-tag>
+                  <el-button v-if="!audioInfo.detail.in_bookrack" class="primary-action" :loading="shelfBusy" @click="toggleShelf">
+                    <el-icon><Plus /></el-icon>加入书架
+                  </el-button>
+                  <el-button v-else type="danger" :loading="shelfBusy" @click="toggleShelf">
+                    <el-icon><Delete /></el-icon>移出书架
+                  </el-button>
                   <el-tag class="ml-2" type="success" v-if="audioInfo.detail.tag?.length >0" round>
                     {{ audioInfo.detail.tag.join(",") }}</el-tag>
                 </el-row>
@@ -82,10 +86,12 @@
 <script lang="ts" setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { AudioDetail } from '../../wailsjs/go/backend/App'
+import { AudioDetail, AddToShelf, RemoveFromShelf } from '../../wailsjs/go/backend/App'
 import { services } from '../../wailsjs/go/models'
 import { secondToHour,timestampToDate } from '../utils/utils'
+import { Plus, Delete } from '@element-plus/icons-vue'
 const dialogVisible = ref(false)
+const shelfBusy = ref(false)
 
 let audioInfo = reactive(new services.AudioInfoResp)
 
@@ -125,6 +131,33 @@ const openDialog = () => {
 const closeDialog = () => {
   audioInfo = reactive(new services.AudioInfoResp)
   emits('close')
+}
+
+// 加入 / 移出听书书架（走统一的 AddToShelf / RemoveFromShelf，听书 product_type=13）
+const toggleShelf = async () => {
+  if (shelfBusy.value) return
+  const id = audioInfo.detail?.audio_id
+  if (!id) {
+    ElMessage.warning('缺少听书标识，无法操作书架')
+    return
+  }
+  shelfBusy.value = true
+  try {
+    const isIn = audioInfo.detail.in_bookrack
+    const res: any = isIn
+      ? await RemoveFromShelf(id, 13)
+      : await AddToShelf(id, 13)
+    if (res && res.ok) {
+      audioInfo.detail.in_bookrack = !isIn
+      ElMessage.success(res.message || '操作成功')
+    } else {
+      ElMessage.warning((res && res.message) || '操作失败')
+    }
+  } catch (error) {
+    ElMessage.error(typeof error === 'string' ? error : '书架操作失败')
+  } finally {
+    shelfBusy.value = false
+  }
 }
 
 </script>

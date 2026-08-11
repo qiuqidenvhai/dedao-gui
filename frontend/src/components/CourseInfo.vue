@@ -8,18 +8,30 @@
     >
         <template #header>
             <div class="dialog-header-content">
-                <h3>{{ courseInfo.class_info.name }}</h3>
+                <div class="title-row">
+                    <h3>{{ courseInfo.class_info.name }}</h3>
+                    <el-tag v-if="kindLabel" size="small" effect="plain" class="kind-tag">{{ kindLabel }}</el-tag>
+                </div>
                 <p class="course-intro" v-if="courseInfo.class_info.intro">{{ courseInfo.class_info.intro }}</p>
             </div>
         </template>
         
         <div class="course-detail-container">
-            <!-- 讲师信息卡片 -->
-            <div class="lecturer-section">
+            <!-- 封面（电子书/听书有封面时展示） -->
+            <div class="cover-section" v-if="coverImg">
+                <el-image :src="coverImg" fit="contain" class="cover-img" />
+            </div>
+
+            <!-- 讲师 / 作者信息卡片 -->
+            <div class="lecturer-section" v-if="courseInfo.class_info.lecturer_name || courseInfo.class_info.lecturer_intro">
                 <div class="lecturer-card">
                     <div class="lecturer-avatar">
-                        <el-avatar :size="80" :src="courseInfo.class_info.lecturer_avatar" />
-                        <el-tag class="lecturer-tag" effect="dark" type="success" size="small">主讲人</el-tag>
+                        <el-avatar :size="80" :src="courseInfo.class_info.lecturer_avatar">
+                            <template #error>
+                                <el-icon :size="40"><User /></el-icon>
+                            </template>
+                        </el-avatar>
+                        <el-tag class="lecturer-tag" effect="dark" type="success" size="small">{{ lecturerRole }}</el-tag>
                     </div>
                     <div class="lecturer-info">
                         <div class="lecturer-name">{{ courseInfo.class_info.lecturer_name }}</div>
@@ -30,23 +42,24 @@
 
             <!-- 数据统计标签 -->
             <div class="stats-container">
-                <div class="stat-item">
+                <div class="stat-item" v-if="updateStatusText">
                     <el-icon class="stat-icon"><Collection /></el-icon>
                     <span class="stat-text">{{ updateStatusText }}</span>
                 </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item">
+                <div class="stat-divider" v-if="updateStatusText"></div>
+                <div class="stat-item" v-if="courseInfo.class_info.learn_user_count">
                     <el-icon class="stat-icon"><User /></el-icon>
                     <span class="stat-text">{{ courseInfo.class_info.learn_user_count }}人加入学习</span>
                 </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item clickable" @click="toggleCollection">
+                <div class="stat-divider" v-if="courseInfo.class_info.learn_user_count"></div>
+                <div class="stat-item clickable" :class="{ busy: shelfBusy }" @click="toggleCollection">
                     <el-icon class="stat-icon" :class="isCollected ? 'active' : ''">
-                        <StarFilled v-if="isCollected" />
+                        <Loading v-if="shelfBusy" />
+                        <StarFilled v-else-if="isCollected" />
                         <Star v-else />
                     </el-icon>
                     <span class="stat-text">
-                        {{ isCollected ? '已收藏' : '收藏' }}
+                        {{ shelfLabel }}
                         <span class="stat-count" v-if="collectionCount">
                             ({{ collectionCount }})
                         </span>
@@ -129,14 +142,28 @@
 <script lang="ts" setup>
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CourseInfo as GetCourseInfo } from '../../wailsjs/go/backend/App'
+import {
+  ProductInfo as GetProductInfo,
+  AddToShelf,
+  RemoveFromShelf
+} from '../../wailsjs/go/backend/App'
 import { services } from '../../wailsjs/go/models'
-import { Collection, User, Star, StarFilled, ChatLineSquare } from '@element-plus/icons-vue'
+import { Collection, User, Star, StarFilled, ChatLineSquare, Loading } from '@element-plus/icons-vue'
+
+// 商品类型（服务端真实取值）：2 电子书 / 13 听书 / 66 课程
+const TYPE_EBOOK = 2
+const TYPE_ODOB = 13
 
 const props = defineProps({
   enid: {
     type: String,
     default: ""
+  },
+  // 可选：调用方已知的商品类型（2 电子书 / 13 听书 / 66 课程），
+  // 不传时从详情返回的 product_type 推断
+  productType: {
+    type: Number,
+    default: 0
   },
   dialogVisible: {
     type: Boolean,
@@ -181,7 +208,7 @@ const updateStatusText = computed(() => {
     }
 })
 
-// 计算属性：是否已收藏
+// 计算属性：是否已在书架 / 已收藏
 const isCollected = computed(() => {
     return !!courseInfo.class_info?.collection?.is_collected
 })
@@ -191,22 +218,99 @@ const collectionCount = computed(() => {
     return courseInfo.class_info?.collection?.collection_count || 0
 })
 
+// 当前商品类型：优先用详情返回的 product_type，其次用调用方传入的
+const curType = computed(() => {
+    return Number(courseInfo.class_info?.product_type) || Number(props.productType) || 0
+})
+
+const kindLabel = computed(() => {
+    switch (curType.value) {
+        case TYPE_EBOOK: return '电子书'
+        case TYPE_ODOB: return '听书'
+        case 66: return '课程'
+        default: return ''
+    }
+})
+
+const lecturerRole = computed(() => {
+    return curType.value === TYPE_EBOOK ? '作者' : (curType.value === TYPE_ODOB ? '解读人' : '主讲人')
+})
+
+const coverImg = computed(() => {
+    const info: any = courseInfo.class_info || {}
+    if (curType.value === TYPE_EBOOK || curType.value === TYPE_ODOB) {
+        return info.index_img || info.logo || ''
+    }
+    return ''
+})
+
+// 书架按钮文案：电子书/听书叫「书架」，课程沿用「收藏」
+const shelfLabel = computed(() => {
+    if (shelfBusy.value) return '处理中…'
+    if (curType.value === TYPE_EBOOK || curType.value === TYPE_ODOB) {
+        return isCollected.value ? '已在书架' : '加入书架'
+    }
+    return isCollected.value ? '已收藏' : '收藏'
+})
+
+const shelfBusy = ref(false)
+
 const closeDialog = () => {
   dialogVisible.value = false;
   // resetCourseInfo(); // 关闭时不需要立即重置，等下次打开覆盖即可，避免动画时内容闪烁
 }
 
-const toggleCollection = () => {
-    // 暂时仅支持显示状态，不处理实际收藏逻辑
-    // 如果需要实现收藏功能，需要调用后端API
-    ElMessage.info('收藏功能开发中')
+// 加入 / 移出书架（电子书、听书）
+const toggleCollection = async () => {
+    if (shelfBusy.value) return
+
+    const pt = curType.value
+    // 得到没有「加入我的课程」接口：课程购买后自动进入我的课程
+    if (pt !== TYPE_EBOOK && pt !== TYPE_ODOB) {
+        ElMessage.info('得到的课程购买后会自动出现在「我的课程」，不支持手动加入书架')
+        return
+    }
+
+    // 听书必须用详情返回的 audio_id，电子书用 64 位 enid，两者都在 class_info.enid 里
+    const enid = courseInfo.class_info?.enid || props.enid
+    if (!enid) {
+        ElMessage.warning('缺少商品标识，无法操作书架')
+        return
+    }
+
+    shelfBusy.value = true
+    try {
+        const res: any = isCollected.value
+            ? await RemoveFromShelf(enid, pt)
+            : await AddToShelf(enid, pt)
+
+        if (res && res.ok) {
+            if (!courseInfo.class_info.collection) {
+                courseInfo.class_info.collection = new services.Collection
+            }
+            courseInfo.class_info.collection.is_collected = !isCollected.value
+            ElMessage.success(res.message || '操作成功')
+        } else {
+            ElMessage.warning((res && res.message) || '操作失败')
+        }
+    } catch (error) {
+        ElMessage.error(typeof error === 'string' ? error : '书架操作失败')
+    } finally {
+        shelfBusy.value = false
+    }
 }
 
 const getCourseInfo = async (enid: string) => {
   try {
-    const info = await GetCourseInfo(enid);
+    const info = await GetProductInfo(enid);
+    // 先清空，避免上一次打开的课程字段（大纲图、评论等）残留到电子书/听书上
+    Object.keys(courseInfo).forEach(k => delete (courseInfo as any)[k])
+    courseInfo.class_info = new services.ClassInfo
+    courseInfo.class_info.collection = new services.Collection
     Object.assign(courseInfo, info);
-    averageScore.value = Number(courseInfo.class_comment_info.average_score);
+    if (!courseInfo.class_info) courseInfo.class_info = new services.ClassInfo
+    if (!courseInfo.class_info.collection) courseInfo.class_info.collection = new services.Collection
+    averageScore.value = Number(courseInfo.class_comment_info?.average_score) || 0;
   } catch (error) {
     console.error('获取课程信息失败:', error);
     ElMessage({
@@ -248,6 +352,21 @@ watch(dialogVisible, (newVal) => {
 }
 
 .dialog-header-content {
+    .title-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+
+        h3 {
+            margin: 0;
+        }
+    }
+
+    .kind-tag {
+        flex-shrink: 0;
+    }
+
     h3 {
         margin: 0 0 8px 0;
         font-size: 20px;
@@ -276,6 +395,20 @@ watch(dialogVisible, (newVal) => {
     &::-webkit-scrollbar-thumb {
         background-color: var(--border-soft);
         border-radius: 3px;
+    }
+}
+
+/* 封面区域（电子书 / 听书） */
+.cover-section {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+
+    .cover-img {
+        max-width: 180px;
+        max-height: 240px;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     }
 }
 

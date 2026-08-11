@@ -72,6 +72,7 @@ import {
   GetQrcode,
   CheckLogin,
   OpenLoginBrowser,
+  RefreshHallCache,
 } from "../../wailsjs/go/backend/App";
 import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
 import { useRouter } from "vue-router";
@@ -125,6 +126,8 @@ const saveLogin = (userData: services.User, cookie: string) => {
   Object.assign(user, userData);
   store.user = user;
   Local.set("cookies", cookie);
+  // 登录成功后后台刷新大厅商品缓存（下次大厅搜索直接读内存，毫秒级）
+  RefreshHallCache();
   if (!store.userList.some((item) => item.uid_hazy === user.uid_hazy)) {
     store.userList.push(user);
   }
