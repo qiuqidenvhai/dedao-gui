@@ -29,7 +29,9 @@ type Datum struct {
 	Type      string `json:"type"`
 	IsCanDL   bool   `json:"is_can_dl"`
 	M3U8URL   string `json:"m3u8_url"`
-	OrderNum  int    `json:"order_num"`
+	OrderNum  int    `json:"order_num"` // 原始搜索排序值（不稳定，仅保留兼容）
+	Index     int    `json:"index"`      // 真实章节序号（1-based，稳定）
+	PublishTime int   `json:"publish_time"` // 发布时间（用于按发布先后排序编号）
 
 	Streams       map[string]Stream `json:"streams"`
 	sortedStreams []Stream

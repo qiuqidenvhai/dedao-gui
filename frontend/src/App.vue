@@ -8,16 +8,72 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { themeStore } from './stores/theme'
 import { settingStore } from './stores/setting'
 import { playerStore } from './stores/player'
-import { AudioDetailAlias, RefreshHallCache } from '../wailsjs/go/backend/App'
+import { AudioDetailAlias, RefreshHallCache, GetActiveUser, GetSettings } from '../wailsjs/go/backend/App'
+import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { setFontFamily } from './utils/utils'
 import { userStore } from './stores/user'
+import { Local } from './utils/storage'
 
 // 初始化主题
 const store = themeStore()
 const sStore = settingStore()
+const uStore = userStore()
+
+// 启动时从后端配置回填登录态：后端 config（已持久化到 %APPDATA%）是登录态的权威来源，
+// Pinia store 重开即清空，必须由后端回填，否则“重新打开后主程序未登录”。
+const hydrateUser = async () => {
+  try {
+    const u = await GetActiveUser()
+    if (u && u.uid_hazy) {
+      if (!uStore.userList.some((item) => item.uid_hazy === u.uid_hazy)) {
+        uStore.userList.push(u)
+      }
+      uStore.user = u
+    }
+  } catch (e) {
+    // 忽略：未登录或后端暂无用户
+  }
+}
+
+// 全局监听登录成功（即使登录弹窗已关闭，主程序也能同步登录态）
+const onLoginSuccess = (data: { user: any; cookie?: string }) => {
+  if (data && data.user && data.user.uid_hazy) {
+    if (!uStore.userList.some((item) => item.uid_hazy === data.user.uid_hazy)) {
+      uStore.userList.push(data.user)
+    }
+    uStore.user = data.user
+    if (data.cookie) Local.set("cookies", data.cookie)
+  }
+}
+
+// 启动时从后端配置回填设置（主题色/字体/工具路径等）。
+// 主窗口 WebView2 数据目录为每进程临时目录，localStorage 重启即空，
+// 所以设置必须依赖后端 config.json 回填，避免“关闭软件后设置丢失”。
+const hydrateSettings = async () => {
+  try {
+    const s = await GetSettings()
+    if (!s) return
+    // 回填全部设置项到 settingStore
+    sStore.setting.downloadDir = s.downloadDir || ''
+    sStore.setting.theme = s.theme || ''
+    sStore.setting.color = s.color || ''
+    sStore.setting.ffmpegDir = s.ffmpegDir || ''
+    sStore.setting.wkhtmltopdfDir = s.wkhtmltopdfDir || ''
+    sStore.setting.fontFamily = s.fontFamily || 'default'
+    if (s.color) store.setThemeColor(s.color)
+    setFontFamily(s.fontFamily || 'default')
+  } catch (e) {
+    // 忽略：后端暂无保存值
+  }
+}
+
 onMounted(() => {
   store.initTheme()
   setFontFamily(sStore.setting.fontFamily || 'default')
+  // 启动即回填登录态与设置
+  hydrateUser()
+  hydrateSettings()
+  EventsOn("login:success", onLoginSuccess)
   // 已登录则后台刷新大厅商品缓存（每次重新打开 App 各一次，搜索时直接读内存）
   if (userStore().user) {
     RefreshHallCache()
@@ -83,6 +139,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('player:resolveTrack', onResolveTrack as any)
+  EventsOff("login:success")
 })
 
 // Element Plus 主题配置

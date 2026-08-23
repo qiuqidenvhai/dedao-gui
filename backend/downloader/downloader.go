@@ -18,7 +18,9 @@ func Download(v Datum, stream, path string) error {
 	v.genSortedStreams()
 
 	title := utils.FileName(v.Title, "")
-	if v.OrderNum > 0 {
+	if v.Index > 0 {
+		title = fmt.Sprintf("%03d.%s", v.Index, title)
+	} else if v.OrderNum > 0 {
 		title = fmt.Sprintf("%03d.%s", v.OrderNum, title)
 	}
 	if stream == "" {

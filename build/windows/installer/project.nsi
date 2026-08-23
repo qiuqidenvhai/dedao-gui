@@ -83,8 +83,8 @@ Section
     
     !insertmacro wails.files
 
-    # 额外文件：登录辅助进程（与主 exe 同目录）
-    File "..\..\build\bin\login_helper.exe"
+    # 登录窗口已内联到主程序，不再需要独立的 login_helper.exe
+    # File "..\..\build\bin\login_helper.exe"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

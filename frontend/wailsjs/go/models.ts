@@ -2787,7 +2787,7 @@ export namespace services {
 	    label_id: number;
 	    group_books?: GroupBook[];
 	    is_buy: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Course(source);
 	    }

@@ -65,6 +65,10 @@ export function GetNavbar():Promise<services.NavbarData>;
 
 export function GetQrcode():Promise<backend.QrCodeResp>;
 
+export function GetActiveUser():Promise<services.User>;
+
+export function GetDownloadPath():Promise<string>;
+
 export function GetVolcPlayAuthToken(arg1:string,arg2:string):Promise<services.MediaVolc>;
 
 export function GetVolcPlayInfo(arg1:string):Promise<services.VodPlayInfoResp>;
@@ -116,6 +120,20 @@ export function SendPhoneCode(arg1:string):Promise<backend.PhoneCodeResult>;
 export function SendPhoneCodeWithCaptcha(arg1:string,arg2:string):Promise<backend.PhoneCodeResult>;
 
 export function SetDir(arg1:Array<string>):Promise<void>;
+
+export function SetDownloadPath(arg1:string):Promise<void>;
+
+export interface SettingsDataModel {
+  theme: string;
+  color: string;
+  ffmpegDir: string;
+  wkhtmltopdfDir: string;
+  fontFamily: string;
+}
+
+export function GetSettings():Promise<SettingsDataModel>;
+
+export function SaveSettings(arg1:SettingsDataModel):Promise<void>;
 
 export function SunflowerLabelContent(arg1:string,arg2:number,arg3:number,arg4:number):Promise<services.SunflowerContent>;
 

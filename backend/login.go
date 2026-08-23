@@ -2,7 +2,7 @@ package backend
 
 import (
 	"errors"
-
+	"log"
 	"strings"
 
 	"github.com/yann0917/dedao-gui/backend/app"
@@ -30,6 +30,43 @@ type PhoneCodeResult struct {
 }
 
 var Instance *services.Service
+
+// GetActiveUser 返回当前已登录的活跃用户，供前端启动时回填登录态。
+// 未登录时返回 (nil, nil)。这是修复“重新打开后主程序未同步登录/登录态丢失”的关键：
+// 前端 Pinia store 在重开后是空的，必须由后端配置（已持久化到 %APPDATA%）回填。
+func (a *App) GetActiveUser() (*services.User, error) {
+	u := config.Instance.ActiveUser()
+	if u == nil || u.UIDHazy == "" {
+		return nil, nil
+	}
+	return &services.User{
+		UIDHazy:  u.UIDHazy,
+		Nickname: u.Name,
+		Avatar:   u.Avatar,
+	}, nil
+}
+
+// GetDownloadPath 返回已保存的下载目录（未设置时为空字符串）
+func (a *App) GetDownloadPath() string {
+	return config.Instance.GetDownloadPath()
+}
+
+// SetDownloadPath 更新并持久化下载目录到配置，避免关闭软件后设置丢失
+func (a *App) SetDownloadPath(p string) error {
+	return config.Instance.SetDownloadPath(p)
+}
+
+// GetSettings 返回已持久化的界面/工具设置（主题色、字体、ffmpeg/wkhtmltopdf 路径等）。
+// 这些值不再依赖前端 localStorage（主窗口 WebView2 数据目录为每进程临时目录，重启即丢），
+// 统一由后端 config.json 持久化，启动时再由前端回填。
+func (a *App) GetSettings() config.SettingsData {
+	return config.Instance.GetSettings()
+}
+
+// SaveSettings 更新并持久化界面/工具设置到后端配置。
+func (a *App) SaveSettings(s config.SettingsData) error {
+	return config.Instance.SaveSettings(s)
+}
 
 func init() {
 	Instance = config.Instance.ActiveUserService()
@@ -206,13 +243,18 @@ func (a *App) PhoneLogin(token, phone, code string) (result services.PhoneLoginR
 }
 
 func (a *App) Logout() (err error) {
-	// 先删除持久化配置；即使文件已经不存在也视为退出成功。
-	if err = config.Instance.DeleteConfigFile(); err != nil {
-		return err
-	}
+	// 1) 先清内存态（这一步必须成功，绝不能因文件删除失败而跳过）：
+	//    清空活跃用户、service、cookie jar，并重置 services 包级状态（CsrfToken/SetCookie）。
 	services.ClearServiceState()
 	config.Instance.Reset()
-	// 退出后立即重建匿名会话，保证扫码和手机号登录共用一套干净的 cookie jar。
+
+	// 2) 删除持久化配置文件（尽力而为，失败不阻塞退出，
+	//    避免“状态没清干净导致无法重新登录”）。
+	if delErr := config.Instance.DeleteConfigFile(); delErr != nil {
+		log.Println("warn: delete config file on logout failed:", delErr)
+	}
+
+	// 3) 退出后立即重建匿名会话，保证扫码和手机号登录共用一套干净的 cookie jar。
 	Instance = config.Instance.ActiveUserService()
 	if Instance == nil {
 		return errors.New("登录服务重新初始化失败")

@@ -132,6 +132,10 @@ const normType = (t: number): number => {
 const countOf = (t: number): number =>
     results.value.filter(i => normType(Number(i.type)) === t).length
 
+const canDownload = (item: services.Course): boolean => {
+    return !!item.enid && !item.is_group
+}
+
 const filteredResults = computed(() => {
     if (!activeType.value) return results.value
     return results.value.filter(i => normType(Number(i.type)) === activeType.value)

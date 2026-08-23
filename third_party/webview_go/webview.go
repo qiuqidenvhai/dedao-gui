@@ -132,6 +132,10 @@ type WebView interface {
 	// 最近一次已完成的 Cookie 字符串（未就绪时返回空串）。
 	// 与 JS 的 document.cookie 不同，这里能读到 HttpOnly 的登录 Cookie。
 	PollCookies() string
+
+	// IsReady 返回 WebView2 环境/控制器是否已就绪（浏览器控制器非空）。
+	// 调用方应在 Navigate 前检查，环境创建失败时返回 false 以便安全报错。
+	IsReady() bool
 }
 
 type webview struct {
@@ -358,4 +362,9 @@ func (w *webview) PollCookies() string {
 // 必须在任何 WebView2 调用之前、main 一开始调用。
 func InstallCrashHandler() {
 	C.install_crash_handler()
+}
+
+// IsReady 返回 WebView2 环境/控制器是否已就绪。
+func (w *webview) IsReady() bool {
+	return C.webview_is_ready(w.w) != 0
 }

@@ -247,6 +247,13 @@ WEBVIEW_API void *webview_get_native_handle(webview_t w,
                                             webview_native_handle_kind_t kind);
 
 /**
+ * Returns whether the WebView2 environment/controller is ready (non-zero)
+ * or has failed to initialize (zero). Lets the caller avoid calling
+ * navigate/eval on a null webview, which would otherwise crash.
+ */
+WEBVIEW_API int webview_is_ready(webview_t w);
+
+/**
  * Updates the title of the native window.
  *
  * @param w The webview instance.
@@ -3260,10 +3267,16 @@ public:
   }
 
   void set_title_impl(const std::string &title) override {
+    if (!m_window) {
+      return;
+    }
     SetWindowTextW(m_window, widen_string(title).c_str());
   }
 
   void set_size_impl(int width, int height, webview_hint_t hints) override {
+    if (!m_window) {
+      return;
+    }
     auto style = GetWindowLong(m_window, GWL_STYLE);
     if (hints == WEBVIEW_HINT_FIXED) {
       style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
@@ -3292,21 +3305,33 @@ public:
   }
 
   void navigate_impl(const std::string &url) override {
+    if (!m_webview) {
+      return;
+    }
     auto wurl = widen_string(url);
     m_webview->Navigate(wurl.c_str());
   }
 
   void init_impl(const std::string &js) override {
+    if (!m_webview) {
+      return;
+    }
     auto wjs = widen_string(js);
     m_webview->AddScriptToExecuteOnDocumentCreated(wjs.c_str(), nullptr);
   }
 
   void eval_impl(const std::string &js) override {
+    if (!m_webview) {
+      return;
+    }
     auto wjs = widen_string(js);
     m_webview->ExecuteScript(wjs.c_str(), nullptr);
   }
 
   void set_html_impl(const std::string &html) override {
+    if (!m_webview) {
+      return;
+    }
     m_webview->NavigateToString(widen_string(html).c_str());
   }
 
@@ -3319,13 +3344,20 @@ private:
     GetModuleFileNameW(nullptr, currentExePath, MAX_PATH);
     wchar_t *currentExeName = PathFindFileNameW(currentExePath);
 
-    wchar_t dataPath[MAX_PATH];
-    if (!SUCCEEDED(
-            SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, dataPath))) {
-      return false;
-    }
     wchar_t userDataFolder[MAX_PATH];
-    PathCombineW(userDataFolder, dataPath, currentExeName);
+    DWORD envLen = GetEnvironmentVariableW(L"DEDDAO_LOGIN_WV2_DIR",
+                                           userDataFolder, MAX_PATH);
+    if (envLen == 0 || envLen > MAX_PATH - 1) {
+      // 未指定唯一目录时退回旧行为（APPDATA\<exeName>）。
+      wchar_t dataPath[MAX_PATH];
+      if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0,
+                                     dataPath))) {
+        return false;
+      }
+      PathCombineW(userDataFolder, dataPath, currentExeName);
+    }
+    // 确保目录存在（WebView2 需要可写目录）。
+    CreateDirectoryW(userDataFolder, nullptr);
 
     m_com_handler = new webview2_com_handler(
         wnd, cb,
@@ -3541,6 +3573,13 @@ WEBVIEW_API void *webview_get_native_handle(webview_t w,
   default:
     return nullptr;
   }
+}
+
+// webview_is_ready 返回 WebView2 环境/控制器是否已就绪（m_webview 非空）。
+// Go 侧在 Navigate 之前调用它，可在环境创建失败时安全报错而不崩溃。
+WEBVIEW_API int webview_is_ready(webview_t w) {
+  auto *w_ = static_cast<webview::webview *>(w);
+  return w_->browser_controller() != nullptr ? 1 : 0;
 }
 
 WEBVIEW_API void webview_set_title(webview_t w, const char *title) {

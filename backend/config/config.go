@@ -30,7 +30,9 @@ func init() {
 	Instance = new(ConfigsData)
 	Instance.configFilePath = configFilePath
 	if err := Instance.init(); err != nil {
-		log.Fatal(err)
+		// 配置加载失败（文件不可读/被占用/缺失）时不再致命退出，
+		// 改为使用空配置继续启动，保证程序一定能打开（显示登录界面）。
+		log.Println("warn: config init failed, continue with empty config:", err)
 	}
 }
 
@@ -42,6 +44,7 @@ type ConfigsData struct {
 	AcitveUID      string
 	DownloadPath   string
 	Users          DedaoUsers
+	Settings       SettingsData
 	activeUser     *Dedao
 	configFilePath string
 	configFile     *os.File
@@ -49,9 +52,23 @@ type ConfigsData struct {
 	service        *services.Service
 }
 
+// SettingsData 持久化的界面/工具设置。
+// 早期版本仅依赖前端 localStorage，但主窗口 WebView2 数据目录改为每进程临时目录后，
+// localStorage 每次启动都是空的，导致主题/字体/工具路径等设置丢失。
+// 这里把所有需要持久化的设置统一落到后端 config.json（%APPDATA%/dedao-gui）。
+type SettingsData struct {
+	Theme          string `json:"theme"`
+	Color          string `json:"color"`
+	FfmpegDir      string `json:"ffmpegDir"`
+	WkhtmltopdfDir string `json:"wkhtmltopdfDir"`
+	FontFamily     string `json:"fontFamily"`
+}
+
 type configJSONExport struct {
-	AcitveUID string
-	Users     DedaoUsers
+	AcitveUID    string
+	DownloadPath string
+	Users        DedaoUsers
+	Settings     SettingsData
 }
 
 // Init 初始化配置
@@ -122,8 +139,10 @@ func (c *ConfigsData) Save() error {
 
 	// 保存配置的数据
 	conf := configJSONExport{
-		AcitveUID: c.AcitveUID,
-		Users:     c.Users,
+		AcitveUID:    c.AcitveUID,
+		DownloadPath: c.DownloadPath,
+		Users:        c.Users,
+		Settings:     c.Settings,
 	}
 
 	data, err := jsoniter.MarshalIndent(conf, "", " ")
@@ -183,7 +202,9 @@ func (c *ConfigsData) loadConfigFromFile() error {
 	decoder.Decode(&conf)
 
 	c.AcitveUID = conf.AcitveUID
+	c.DownloadPath = conf.DownloadPath
 	c.Users = conf.Users
+	c.Settings = conf.Settings
 	return nil
 }
 
@@ -244,19 +265,44 @@ func New(configFilePath string) *ConfigsData {
 }
 
 // GetConfigDir config file dir
+// 优先使用 DEDAO_GO_CONFIG_DIR 环境变量（绝对路径）；否则使用各平台的持久化用户配置目录：
+// Windows -> %APPDATA%/dedao-gui，macOS/Linux -> $XDG_CONFIG_HOME 或 ~/.config/dedao-gui。
+// 关键修复：原实现在 Windows（HOME 通常未设置）会回退到 /tmp/dedao，该路径易失且不可靠，
+// 导致配置（登录态、设置）每次关闭都被丢弃。改用 os.UserConfigDir() 指向系统持久化目录。
 func GetConfigDir() string {
 	configDir, ok := os.LookupEnv(EnvConfigDir)
-	if ok {
-		if filepath.IsAbs(configDir) {
-			return configDir
-		}
+	if ok && filepath.IsAbs(configDir) {
+		return configDir
 	}
-	home, ok := os.LookupEnv("HOME")
-	if ok {
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "dedao-gui")
+	}
+	if home, ok := os.LookupEnv("HOME"); ok {
 		return filepath.Join(home, ".config", "dedao")
 	}
+	return filepath.Join(os.TempDir(), "dedao")
+}
 
-	return filepath.Join("/tmp", "dedao")
+// GetDownloadPath 返回已保存的下载目录（未设置时为空字符串）
+func (c *ConfigsData) GetDownloadPath() string {
+	return c.DownloadPath
+}
+
+// SetDownloadPath 更新并持久化下载目录
+func (c *ConfigsData) SetDownloadPath(p string) error {
+	c.DownloadPath = p
+	return c.Save()
+}
+
+// GetSettings 返回已保存的界面/工具设置
+func (c *ConfigsData) GetSettings() SettingsData {
+	return c.Settings
+}
+
+// SaveSettings 更新并持久化界面/工具设置
+func (c *ConfigsData) SaveSettings(s SettingsData) error {
+	c.Settings = s
+	return c.Save()
 }
 
 // ActiveUserService user

@@ -1,6 +1,7 @@
 {
   "name": "dedao-gui",
   "outputfilename": "dedao-gui",
+  "icon": "build/windows/icon.ico",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",

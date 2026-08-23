@@ -177,7 +177,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { 
   Folder, 
   FolderOpened, 
@@ -192,7 +192,7 @@ import {
 } from '@element-plus/icons-vue'
 import { settingStore } from "../stores/setting"
 import { themeStore } from "../stores/theme"
-import { OpenDirectoryDialog, OpenFileDialog } from "../../wailsjs/go/backend/App"
+import { OpenDirectoryDialog, OpenFileDialog, GetDownloadPath, SetDownloadPath, GetSettings, SaveSettings } from "../../wailsjs/go/backend/App"
 import { setThemeColor, setFontFamily } from "../utils/utils"
 import { ElMessage } from 'element-plus'
 
@@ -233,6 +233,48 @@ const originalSettings = {
   wkhtmltopdfDir: store.getWkDir,
   fontFamily: store.setting.fontFamily || 'default',
 }
+
+// 启动时从后端配置回填下载目录（后端 config 已持久化到 %APPDATA%，是设置的可靠来源）。
+// 这样即便前端 localStorage 被清理，关闭软件后下载目录也不会丢失。
+onMounted(async () => {
+  try {
+    const saved = await GetDownloadPath()
+    if (saved && !form.downloadDir) {
+      form.downloadDir = saved
+      originalSettings.downloadDir = saved
+      store.setting.downloadDir = saved
+    }
+  } catch (e) {
+    // 忽略：后端暂无保存值
+  }
+  // 回填其余设置（主题色/字体/工具路径），这些只存在于后端 config.json，
+  // 不再依赖前端 localStorage（主窗口 WebView2 数据目录为每进程临时目录，重启即空）。
+  try {
+    const s = await GetSettings()
+    if (s) {
+      if (s.color) {
+        form.systemColor = s.color
+        originalSettings.systemColor = s.color
+        themeStoreInstance.setThemeColor(s.color)
+      }
+      if (s.ffmpegDir) {
+        form.ffmpegDir = s.ffmpegDir
+        originalSettings.ffmpegDir = s.ffmpegDir
+      }
+      if (s.wkhtmltopdfDir) {
+        form.wkhtmltopdfDir = s.wkhtmltopdfDir
+        originalSettings.wkhtmltopdfDir = s.wkhtmltopdfDir
+      }
+      if (s.fontFamily) {
+        form.fontFamily = s.fontFamily
+        originalSettings.fontFamily = s.fontFamily
+        setFontFamily(s.fontFamily)
+      }
+    }
+  } catch (e) {
+    // 忽略：后端暂无保存值
+  }
+})
 
 const openDialogDir = async (title: string) => {
   try {
@@ -288,6 +330,15 @@ const onSubmit = () => {
   
   // 更新设置存储
   store.setting.downloadDir = form.downloadDir
+  // 同时持久化到后端配置（关闭软件后不丢失）
+  SetDownloadPath(form.downloadDir).catch(() => {})
+  SaveSettings({
+    theme: form.systemColor,
+    color: form.systemColor,
+    ffmpegDir: form.ffmpegDir,
+    wkhtmltopdfDir: form.wkhtmltopdfDir,
+    fontFamily: form.fontFamily,
+  }).catch(() => {})
   store.setting.theme = form.systemColor
   store.setting.ffmpegDir = form.ffmpegDir
   store.setting.wkhtmltopdfDir = form.wkhtmltopdfDir

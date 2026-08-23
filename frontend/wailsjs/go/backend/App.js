@@ -122,6 +122,22 @@ export function GetQrcode() {
   return window['go']['backend']['App']['GetQrcode']();
 }
 
+export function GetActiveUser() {
+  return window['go']['backend']['App']['GetActiveUser']();
+}
+
+export function GetDownloadPath() {
+  return window['go']['backend']['App']['GetDownloadPath']();
+}
+
+export function GetSettings() {
+  return window['go']['backend']['App']['GetSettings']();
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['backend']['App']['SaveSettings'](arg1);
+}
+
 export function GetVolcPlayAuthToken(arg1, arg2) {
   return window['go']['backend']['App']['GetVolcPlayAuthToken'](arg1, arg2);
 }
@@ -224,6 +240,10 @@ export function SendPhoneCodeWithCaptcha(arg1, arg2) {
 
 export function SetDir(arg1) {
   return window['go']['backend']['App']['SetDir'](arg1);
+}
+
+export function SetDownloadPath(arg1) {
+  return window['go']['backend']['App']['SetDownloadPath'](arg1);
 }
 
 export function SunflowerLabelContent(arg1, arg2, arg3, arg4) {

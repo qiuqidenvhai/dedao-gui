@@ -3,11 +3,14 @@
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -72,33 +75,47 @@ func (d *CourseDownload) Download() error {
 	}
 
 	switch d.DownloadType {
-	case 1: // mp3
+	case 1: // mp3 — 并行下载（5并发）
 		downloadData := extractDownloadData(course, articles, d.AID, 1)
 		errs := make([]error, 0)
+		errsMu := sync.Mutex{}
 
 		path, err := utils.Mkdir(OutputDir, utils.FileName(course.ClassInfo.Name, ""), "MP3")
 		if err != nil {
 			return err
 		}
 
-		total, curr := len(downloadData.Data), 0
+		total := len(downloadData.Data)
+		var curr atomic.Int32
+
+		// 并发控制：最多5个同时下载
+		wgp := utils.NewWaitGroupPool(5)
 		for _, datum := range downloadData.Data {
-			var progress Progress
-			progress.ID = d.ID
-			progress.Total = total
-			curr++
-			progress.Current = curr
-			progress.Pct = curr * 100 / progress.Total
-			progress.Value = datum.Title
-			runtime.EventsEmit(d.Ctx, "courseDownload", progress)
-			if !datum.IsCanDL {
-				continue
-			}
-			stream := datum.Enid
-			if err := downloader.Download(datum, stream, path); err != nil {
-				errs = append(errs, err)
-			}
+			datum := datum // capture
+			wgp.Add()
+			go func() {
+				defer wgp.Done()
+				idx := curr.Add(1)
+
+				var progress Progress
+				progress.ID = d.ID
+				progress.Total = total
+				progress.Current = int(idx)
+				progress.Pct = int(idx) * 100 / progress.Total
+				progress.Value = datum.Title
+				runtime.EventsEmit(d.Ctx, "courseDownload", progress)
+				if !datum.IsCanDL {
+					return
+				}
+				stream := datum.Enid
+				if err := downloader.Download(datum, stream, path); err != nil {
+					errsMu.Lock()
+					errs = append(errs, err)
+					errsMu.Unlock()
+				}
+			}()
 		}
+		wgp.Wait()
 		if len(errs) > 0 {
 			return errs[0]
 		}
@@ -270,62 +287,94 @@ func extractDownloadData(course *services.CourseInfo, articles *services.Article
 
 	if course.HasAudio() {
 		downloadData.Type = "audio"
-		downloadData.Data = extractCourseDownloadData(articles, aid, flag)
+		downloadData.Data = extractCourseDownloadData(articles, aid, flag, course.ClassInfo.DefaultSortReverse)
 	}
 
 	return downloadData
 }
 
 // 生成课程下载数据
-func extractCourseDownloadData(articles *services.ArticleList, aid int, flag int) []downloader.Datum {
+// defaultSortReverse：课程自身声明的默认排序方向（来自接口 default_sort_reverse）。
+// 为 true 时接口默认返回"最新在前"，需整体反转成"最旧在前"才能满足"旧→新从小到大"的编号诉求。
+func extractCourseDownloadData(articles *services.ArticleList, aid int, flag int, defaultSortReverse bool) []downloader.Datum {
 	data := downloader.EmptyData
 	audioIds := map[int]string{}
 
-	audioData := make([]*downloader.Datum, 0)
+	// 第一步：构建所有可下载条目（不过滤 aid），用于全局排序编号
+	allAudioData := make([]*downloader.Datum, 0)
 	for _, article := range articles.List {
-		if aid > 0 && article.ID != aid {
+		if article.Audio.Mp3PlayURL == "" || len(article.AudioAliasIds) == 0 {
 			continue
 		}
-
-		if article.Audio.Mp3PlayURL != "" && len(article.AudioAliasIds) > 0 {
-			audioIds[article.ID] = article.Audio.AliasID
-
-			var urls []downloader.URL
-			key := article.Enid
-			streams := map[string]downloader.Stream{
-				key: {
-					URLs:    urls,
-					Size:    article.Audio.Size,
-					Quality: key,
-				},
-			}
-			isCanDL := true
-			if len(article.Audio.AliasID) == 0 {
-				isCanDL = true
-			}
-			datum := &downloader.Datum{
-				ID:        article.ID,
-				Enid:      article.Enid,
-				ClassEnid: article.ClassEnid,
-				ClassID:   article.ClassID,
-				Title:     article.Title,
-				IsCanDL:   isCanDL,
-				M3U8URL:   article.Audio.Mp3PlayURL,
-				OrderNum:  article.OrderNum,
-				Streams:   streams,
-				Type:      "audio",
-			}
-
-			audioData = append(audioData, datum)
+		audioIds[article.ID] = article.Audio.AliasID
+		var urls []downloader.URL
+		key := article.Enid
+		datum := &downloader.Datum{
+			ID:          article.ID,
+			Enid:        article.Enid,
+			ClassEnid:   article.ClassEnid,
+			ClassID:     article.ClassID,
+			Title:       article.Title,
+			IsCanDL:     true,
+			M3U8URL:     article.Audio.Mp3PlayURL,
+			OrderNum:    article.OrderNum,
+			PublishTime: article.PublishTime,
+			Index:       0, // 初始占位，由下方全局排序后重新赋值
+			Streams:     map[string]downloader.Stream{key: {URLs: urls, Size: article.Audio.Size, Quality: key}},
+			Type:        "audio",
 		}
-
+		allAudioData = append(allAudioData, datum)
 	}
 
-	if flag == 1 {
-		handleStreams(audioData, audioIds)
+	// 第二步：全局排序——让整档节目按正确顺序排好，而不是只排当前这一条
+	nOrder, nPub := 0, 0
+	for _, d := range allAudioData {
+		if d.OrderNum > 0 {
+			nOrder++
+		}
+		if d.PublishTime > 0 {
+			nPub++
+		}
+	}
+	switch {
+	case nOrder == len(allAudioData) && nOrder > 0:
+		sort.SliceStable(allAudioData, func(i, j int) bool {
+			return allAudioData[i].OrderNum < allAudioData[j].OrderNum
+		})
+	case nPub == len(allAudioData) && nPub > 0:
+		sort.SliceStable(allAudioData, func(i, j int) bool {
+			return allAudioData[i].PublishTime < allAudioData[j].PublishTime
+		})
+	default:
+		if defaultSortReverse {
+			for i, j := 0, len(allAudioData)-1; i < j; i, j = i+1, j-1 {
+				allAudioData[i], allAudioData[j] = allAudioData[j], allAudioData[i]
+			}
+		}
+	}
+	for i := range allAudioData {
+		allAudioData[i].Index = i + 1
 	}
 
-	for _, d := range audioData {
+	// 调试日志：打印全局排序前后的前后各5条
+	if len(allAudioData) > 0 {
+		n := len(allAudioData)
+		log.Printf("[DEBUG_SORT] global count=%d, defaultSortReverse=%v", n, defaultSortReverse)
+		for k, d := range allAudioData {
+			if k < 5 || k >= n-5 {
+				log.Printf("[DEBUG_SORT] [%d] id=%d index=%d order_num=%d publish_time=%d title=%q", k, d.ID, d.Index, d.OrderNum, d.PublishTime, d.Title)
+			}
+		}
+	}
+
+	// 第三步：根据 aid 过滤（aid=0 表示全量，否则只取对应条目）
+	for _, d := range allAudioData {
+		if aid > 0 && d.ID != aid {
+			continue
+		}
+		if flag == 1 {
+			handleStreams([]*downloader.Datum{d}, audioIds)
+		}
 		data = append(data, *d)
 	}
 	return data
@@ -567,7 +616,11 @@ func DownloadPdfCourse(list []downloader.Datum, path string, ctx context.Context
 		}
 
 		name = utils.FileName(v.Title, "pdf")
-		name = fmt.Sprintf("%03d.%s", v.OrderNum, name)
+		if v.Index > 0 {
+			name = fmt.Sprintf("%03d.%s", v.Index, name)
+		} else if v.OrderNum > 0 {
+			name = fmt.Sprintf("%03d.%s", v.OrderNum, name)
+		}
 		fileName = filepath.Join(path, name)
 		_, exist, err := utils.FileSize(fileName)
 		if err != nil {
@@ -615,7 +668,7 @@ func DownloadMarkdown(list *services.ArticleList, aid int, path string, ctx cont
 		}
 
 		name := utils.FileName(v.Title, "md")
-		name = fmt.Sprintf("%03d.%s", v.OrderNum, name)
+		name = fmt.Sprintf("%03d.%s", curr, name)
 		fileName := filepath.Join(path, name)
 		_, exist, err := utils.FileSize(fileName)
 

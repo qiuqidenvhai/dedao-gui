@@ -59,8 +59,8 @@
 
       <!-- 右侧用户信息卡片 -->
       <div class="user-card-wrapper">
-        <div class="user-card" :class="!Local.get('cookies') ? 'not-login' : ''">
-          <div v-if="Local.get('cookies')==null" class="login-prompt">
+        <div class="user-card" :class="!isLoggedIn ? 'not-login' : ''">
+          <div v-if="!isLoggedIn" class="login-prompt">
             <div class="login-placeholder">
                <img src="../assets/images/logo-universal.png" alt="Logo" class="login-logo" />
                <p>登录开启学习之旅</p>
@@ -258,7 +258,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onBeforeMount, onMounted } from "vue";
+import { ref, reactive, computed, onBeforeMount, onMounted } from "vue";
 import { ElMessage, ElDivider } from "element-plus";
 import { VideoPlay } from '@element-plus/icons-vue'
 import {
@@ -278,6 +278,7 @@ import CourseInfo from "../components/CourseInfo.vue";
 import { useAppRouter } from "../composables/useRouter";
 import { ROUTE_NAMES } from "../router/routes";
 import { Local } from "../utils/storage";
+import { userStore } from "../stores/user";
 
 const { pushByName, replace, pushCourseDetail } = useAppRouter();
 
@@ -312,13 +313,20 @@ let currentCourse = reactive(new services.Navigation());
 let currentEbook = reactive(new services.Navigation());
 let user = reactive(new services.User());
 
+// 登录态以 userStore 为准（由 App.vue 启动时从后端 GetActiveUser 回填，
+// 权威来源是后端持久化配置，而非 Local 缓存，避免关闭软件后首页显示未登录）。
+const uStore = userStore();
+const isLoggedIn = computed(() => !!uStore.user && !!uStore.user.nickname);
+
 onBeforeMount(() => {
   // 分类
   GetHomeInitialState()
     .then((state) => {
       Object.assign(initial, state);
       console.log(state);
-      if (initial.isLogin) {
+      // 已登录态以 userStore（后端回填）为准；若已有用户则拉取资料
+      if (isLoggedIn.value && uStore.user) {
+        Object.assign(user, uStore.user);
         getUserInfo();
       }
     })

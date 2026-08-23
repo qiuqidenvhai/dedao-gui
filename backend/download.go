@@ -1,12 +1,14 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yann0917/dedao-gui/backend/app"
+	"github.com/yann0917/dedao-gui/backend/downloader"
 	"github.com/yann0917/dedao-gui/backend/services"
 	"github.com/yann0917/dedao-gui/backend/utils"
 )
@@ -106,21 +108,27 @@ func (a *App) BatchEbookDownload(ebooks []BatchEbookDownload, dType int) (err er
 		return fmt.Errorf("没有选择要下载的电子书")
 	}
 
-	// 逐个下载，使用goroutine在后台下载
-	go func() {
-		for _, ebook := range ebooks {
+	mgr := a.dlManager.Get(a.Ctx)
+
+	// 并行下载：每个电子书作为一个任务提交到管理器
+	for _, ebook := range ebooks {
+		ebook := ebook // capture
+		taskID := fmt.Sprintf("ebook_%d_%d", ebook.ID, dType)
+		mgr.AddTask(taskID, ebook.Title, func(ctx context.Context, report func(downloader.TaskProgress)) error {
 			var d app.EBookDownload
-			d.Ctx = a.Ctx
+			d.Ctx = ctx
 			d.ID = ebook.ID
 			d.DownloadType = dType
 			d.EnID = ebook.EnID
+			return d.Download()
+		})
+	}
 
-			err := d.Download()
-			if err != nil {
-				fmt.Printf("下载 %s 失败: %v\n", ebook.Title, err)
-			}
-		}
-	}()
+	// 通知前端任务已添加
+	wailsruntime.EventsEmit(a.Ctx, "download:queue", map[string]interface{}{
+		"total": len(ebooks),
+		"type":  "ebook",
+	})
 
 	return nil
 }
@@ -138,22 +146,27 @@ func (a *App) BatchCourseDownload(articles []BatchArticleDownload, dType int) (e
 		return fmt.Errorf("没有选择要下载的文章")
 	}
 
-	// 逐个下载，使用goroutine在后台下载
-	go func() {
-		for _, article := range articles {
+	mgr := a.dlManager.Get(a.Ctx)
+
+	// 并行下载：每个课程作为一个任务提交到管理器（5个并发）
+	for _, article := range articles {
+		article := article // capture
+		taskID := fmt.Sprintf("course_%d_%d_%s", article.ID, dType, article.EnID)
+		mgr.AddTask(taskID, article.Title, func(ctx context.Context, report func(downloader.TaskProgress)) error {
 			var d app.CourseDownload
-			d.Ctx = a.Ctx
+			d.Ctx = ctx
 			d.ID = article.ID
 			d.AID = article.AID
 			d.EnId = article.EnID
 			d.DownloadType = dType
+			return d.Download()
+		})
+	}
 
-			err := d.Download()
-			if err != nil {
-				fmt.Printf("下载 %s 失败: %v\n", article.Title, err)
-			}
-		}
-	}()
+	wailsruntime.EventsEmit(a.Ctx, "download:queue", map[string]interface{}{
+		"total": len(articles),
+		"type":  "course",
+	})
 
 	return nil
 }
