@@ -156,7 +156,7 @@
 import { onMounted, onUnmounted, reactive, ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, VideoPlay, Memo, Download, Picture, Loading, Select } from '@element-plus/icons-vue'
-import {ArticleList, SetDir, BatchCourseDownload} from '../../wailsjs/go/backend/App'
+import {ArticleList, ArticleListAll, SetDir, BatchCourseDownload} from '../../wailsjs/go/backend/App'
 import {services} from '../../wailsjs/go/models'
 import {useRoute} from 'vue-router'
 import {secondToHour} from '../utils/utils'
@@ -215,11 +215,26 @@ const toggleSelection = (item: any) => {
     }
 }
 
-const toggleAllSelection = () => {
+const toggleAllSelection = async () => {
     if (isAllSelected.value) {
         selectedArticles.value = []
     } else {
-        selectedArticles.value = [...tableData.article_list]
+        // 尝试从后端获取全部文章（不分页）
+        try {
+            const allArticles = await ArticleListAll(id.value, '')
+            if (allArticles && allArticles.article_list && allArticles.article_list.length > 0) {
+                selectedArticles.value = [...allArticles.article_list]
+                // 同步更新表格数据，避免重复滚动加载
+                tableData.article_list = allArticles.article_list
+                finished.value = true
+            } else {
+                // 回退：选择当前已加载的
+                selectedArticles.value = [...tableData.article_list]
+            }
+        } catch (e) {
+            console.error('ArticleListAll failed:', e)
+            selectedArticles.value = [...tableData.article_list]
+        }
     }
 }
 

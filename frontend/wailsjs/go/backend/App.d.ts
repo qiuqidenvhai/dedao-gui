@@ -15,6 +15,8 @@ export function ArticleDetail(arg1:number,arg2:string):Promise<string>;
 
 export function ArticleList(arg1:string,arg2:string,arg3:number,arg4:number,arg5:boolean):Promise<services.ArticleList>;
 
+export function ArticleListAll(arg1:number,arg2:string):Promise<services.ArticleList>;
+
 export function AudioDetail(arg1:string):Promise<services.AudioInfoResp>;
 
 export function AudioDetailAlias(arg1:string):Promise<services.Audio>;

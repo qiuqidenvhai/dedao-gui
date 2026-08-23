@@ -68,6 +68,11 @@ func (a *App) SaveSettings(s config.SettingsData) error {
 	return config.Instance.SaveSettings(s)
 }
 
+// ArticleListAll 获取课程的全部文章列表（不分页，用于"全选"时一次性加载所有内容）
+func (a *App) ArticleListAll(id int, chapterID string) (*services.ArticleList, error) {
+	return app.ArticleListAll(id, chapterID)
+}
+
 func init() {
 	Instance = config.Instance.ActiveUserService()
 }

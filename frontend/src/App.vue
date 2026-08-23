@@ -8,7 +8,7 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { themeStore } from './stores/theme'
 import { settingStore } from './stores/setting'
 import { playerStore } from './stores/player'
-import { AudioDetailAlias, RefreshHallCache, GetActiveUser, GetSettings } from '../wailsjs/go/backend/App'
+import { AudioDetailAlias, RefreshHallCache, GetActiveUser, GetSettings, GetDownloadPath } from '../wailsjs/go/backend/App'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { setFontFamily } from './utils/utils'
 import { userStore } from './stores/user'
@@ -51,10 +51,12 @@ const onLoginSuccess = (data: { user: any; cookie?: string }) => {
 // 所以设置必须依赖后端 config.json 回填，避免“关闭软件后设置丢失”。
 const hydrateSettings = async () => {
   try {
+    // 下载目录存在后端 config.DownloadPath，不在 SettingsData 里
+    const dlDir = await GetDownloadPath()
+    sStore.setting.downloadDir = dlDir || ''
     const s = await GetSettings()
     if (!s) return
     // 回填全部设置项到 settingStore
-    sStore.setting.downloadDir = s.downloadDir || ''
     sStore.setting.theme = s.theme || ''
     sStore.setting.color = s.color || ''
     sStore.setting.ffmpegDir = s.ffmpegDir || ''
