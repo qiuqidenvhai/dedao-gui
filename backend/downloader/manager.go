@@ -102,7 +102,17 @@ func NewDownloadManager(wailsCtx context.Context, workers int) *DownloadManager 
 	if workers > 20 {
 		workers = 20
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	// 关键：下载任务 ctx 必须继承 Wails 生命周期 ctx。
+	// Wails 的 runtime.EventsEmit(ctx, ...) 会从 ctx 里取 "events" 值，取不到就直接
+	// log.Fatalf("An invalid context was passed") 让整个进程退出。
+	// 以前这里写死 context.Background()，导致 BatchCourseDownload 里
+	// d.Ctx = 任务ctx（无 events）→ CourseDownload.Download() 第一次 EventsEmit 就秒退，
+	// 表现为「点批量下载后什么也没发生 / 程序自己没了」。
+	base := wailsCtx
+	if base == nil {
+		base = context.Background()
+	}
+	ctx, cancel := context.WithCancel(base)
 	_, gcancel := context.WithCancel(context.Background())
 	m := &DownloadManager{
 		ctx:          ctx,

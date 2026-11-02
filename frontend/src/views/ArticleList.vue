@@ -167,6 +167,7 @@ import {settingStore} from "../stores/setting";
 import { User, Clock, Calendar, Sort, InfoFilled } from '@element-plus/icons-vue'
 import { timestampToDate } from '../utils/utils'
 import {useAppRouter} from '../composables/useRouter'
+import {handleAuthError} from '../composables/useAuthGuard'
 import {ROUTE_NAMES} from '../router/routes'
 import { playerStore, type PlayerTrack } from '../stores/player'
 
@@ -233,6 +234,7 @@ const toggleAllSelection = async () => {
             }
         } catch (e) {
             console.error('ArticleListAll failed:', e)
+            if (await handleAuthError(e)) return
             selectedArticles.value = [...tableData.article_list]
         }
     }
@@ -443,6 +445,11 @@ const loadMoreArticles = async () => {
             finished.value = true
         }
     } catch (error) {
+        // 令牌过期：直接退出到登录页，不要只是提示「获取数据失败」
+        if (await handleAuthError(error)) {
+            finished.value = true // 防止异常时死循环
+            return
+        }
         ElMessage({ message: '获取数据失败', type: 'error' })
         finished.value = true // 防止异常时死循环
     } finally {

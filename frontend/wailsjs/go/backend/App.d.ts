@@ -81,6 +81,8 @@ export function HallSearch(arg1:string,arg2:number):Promise<Array<services.Cours
 
 export function Logout():Promise<void>;
 
+export function ClearExpiredLogin():Promise<void>;
+
 export function NotesTimeline(arg1:string):Promise<services.NotesTimeline>;
 
 export function OdobDownload(arg1:number,arg2:number,arg3:services.Course):Promise<void>;

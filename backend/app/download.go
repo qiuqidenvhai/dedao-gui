@@ -303,7 +303,7 @@ func extractCourseDownloadData(articles *services.ArticleList, aid int, flag int
 	// 第一步：构建所有可下载条目（不过滤 aid），用于全局排序编号
 	allAudioData := make([]*downloader.Datum, 0)
 	for _, article := range articles.List {
-		if article.Audio.Mp3PlayURL == "" || len(article.AudioAliasIds) == 0 {
+		if article.Audio == nil || article.Audio.Mp3PlayURL == "" || len(article.AudioAliasIds) == 0 {
 			continue
 		}
 		audioIds[article.ID] = article.Audio.AliasID

@@ -162,6 +162,10 @@ export function Logout() {
   return window['go']['backend']['App']['Logout']();
 }
 
+export function ClearExpiredLogin() {
+  return window['go']['backend']['App']['ClearExpiredLogin']();
+}
+
 export function NotesTimeline(arg1) {
   return window['go']['backend']['App']['NotesTimeline'](arg1);
 }

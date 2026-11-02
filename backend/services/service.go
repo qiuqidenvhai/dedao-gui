@@ -2,6 +2,8 @@ package services
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/yann0917/dedao-gui/backend/utils"
@@ -166,6 +169,30 @@ func NewService(co *CookieOptions) *Service {
 		client.SetHeaderVerbatim("Xi-Csrf-Token", co.CsrfToken)
 	}
 	return &Service{client: client}
+}
+
+// GATExpired 判断 GAT 令牌是否已过期。
+// 解析不出 exp（不是标准 JWT）时返回 false，交给服务器判定，避免误杀。
+func GATExpired(gat string) bool {
+	parts := strings.Split(gat, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		// 有些令牌带 padding，再试标准编码
+		payload, err = base64.URLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return false
+		}
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || claims.Exp <= 0 {
+		return false
+	}
+	return time.Now().Unix() >= claims.Exp
 }
 
 func (r *Response) isSuccess() bool {

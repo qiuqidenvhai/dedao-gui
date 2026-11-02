@@ -247,6 +247,29 @@ func (a *App) PhoneLogin(token, phone, code string) (result services.PhoneLoginR
 	return *phoneResult, nil
 }
 
+// ClearExpiredLogin 清除「已过期」的登录数据，让程序回到未登录态。
+//
+// 与 Logout 的区别：Logout 会把整个 config.json 删掉，连下载目录、ffmpeg 路径、
+// 主题这些设置一起没了；这里只把用户/令牌清空并持久化，设置原样保留。
+// 用途：启动时发现 GAT 已过期，自动清数据，用户直接重新登录即可。
+func (a *App) ClearExpiredLogin() (err error) {
+	services.ClearServiceState()
+	config.Instance.Reset()
+
+	// 持久化「没有用户」的状态，避免下次启动又读到过期令牌
+	if saveErr := config.Instance.Save(); saveErr != nil {
+		log.Println("warn: save cleared config failed:", saveErr)
+	}
+
+	// 重建匿名会话，保证扫码/手机号登录共用一套干净的 cookie jar
+	Instance = config.Instance.ActiveUserService()
+	if Instance == nil {
+		return errors.New("登录服务重新初始化失败")
+	}
+	_, err = Instance.GetHomeInitialState()
+	return err
+}
+
 func (a *App) Logout() (err error) {
 	// 1) 先清内存态（这一步必须成功，绝不能因文件删除失败而跳过）：
 	//    清空活跃用户、service、cookie jar，并重置 services 包级状态（CsrfToken/SetCookie）。

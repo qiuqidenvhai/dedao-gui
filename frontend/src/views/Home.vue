@@ -276,6 +276,7 @@ import QrLogin from "../components/QrLogin.vue";
 import EbookInfo from "../components/EbookInfo.vue";
 import CourseInfo from "../components/CourseInfo.vue";
 import { useAppRouter } from "../composables/useRouter";
+import { handleAuthError } from "../composables/useAuthGuard";
 import { ROUTE_NAMES } from "../router/routes";
 import { Local } from "../utils/storage";
 import { userStore } from "../stores/user";
@@ -330,7 +331,9 @@ onBeforeMount(() => {
         getUserInfo();
       }
     })
-    .catch((error) => {
+    .catch(async (error) => {
+      // 令牌过期要立刻退出到登录页，否则会停在「已登录但数据全空」的状态
+      if (await handleAuthError(error)) return;
       console.log(error);
     });
 });
