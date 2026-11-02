@@ -44,6 +44,13 @@
   --card-hover-bg: #ffffff;
   --menu-bg: var(--card-bg-light);
   --menu-hover-bg: var(--fill-color-light);
+
+  /* 补齐被引用但此前没有定义的变量。
+     之前 --bg-secondary / --border-color 只在 GlobalSearch、HallSearch、Hall 里被 var() 引用，
+     却从来没有赋值，导致搜索框背景色规则失效、回落到 Element Plus 的白色默认值——
+     深色主题下就是那个扎眼的白输入框。 */
+  --bg-secondary: var(--card-bg-light);
+  --border-color: var(--border-soft);
   
   --text-tertiary: #C0C4CC;
   
@@ -83,6 +90,12 @@ html.theme-dark {
   --text-placeholder: #6C6E72;
   
   --border-soft: #4C4D4F;
+  --border-color: #4C4D4F;
+
+  /* 输入类控件底色：Element Plus 的 el-input__wrapper 取的就是 --el-fill-color-blank，
+     不覆盖的话深色主题下所有输入框仍是白底。 */
+  --bg-secondary: #232427;
+  --el-fill-color-blank: #232427;
   
   --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.3);
   --shadow-medium: 0 6px 16px rgba(0, 0, 0, 0.4);

@@ -26,11 +26,13 @@
             <el-button 
                 type="primary" 
                 link 
+                :loading="selectingAll"
+                :disabled="selectingAll"
                 @click="toggleAllSelection"
                 class="action-btn"
             >
-                <el-icon><Select /></el-icon>
-                {{ isAllSelected ? '取消全选' : '全选' }}
+                <el-icon v-if="!selectingAll"><Select /></el-icon>
+                {{ selectingAll ? '正在加载全部…' : (isAllSelected ? '取消全选' : '全选') }}
             </el-button>
             <el-button 
                 type="success" 
@@ -198,6 +200,8 @@ const downloadTypeOptions = [
 // 批量下载相关
 const selectedArticles = ref<any[]>([])
 const batchDownloadData = ref<any[]>([])
+// 全选进行中（拉全量需要几秒，必须给用户明确反馈，否则会以为卡住连点）
+const selectingAll = ref(false)
 
 const isAllSelected = computed(() => {
     return tableData.article_list.length > 0 && 
@@ -216,27 +220,78 @@ const toggleSelection = (item: any) => {
     }
 }
 
+// 分页把整门课的文章全部拉下来（不依赖后端 ArticleListAll）
+const fetchArticlesAllByPaging = async () => {
+    const size = 30
+    let maxId = 0
+    let acc: any[] = []
+    for (let i = 0; i < 300; i++) {
+        const res = await ArticleList(enid.value, "", size, maxId, isReverse.value)
+        const list = res?.article_list || []
+        if (list.length === 0) break
+        acc = acc.concat(list)
+        const last = list[list.length - 1]?.id
+        if (last == null || last === maxId) break
+        maxId = last
+        if (list.length < size) break
+    }
+    return acc
+}
+
 const toggleAllSelection = async () => {
+    // 取消全选是纯本地操作，立即执行
     if (isAllSelected.value) {
         selectedArticles.value = []
-    } else {
-        // 尝试从后端获取全部文章（不分页）
+        return
+    }
+    // 防连点：拉全量要几秒，重复点击会并发多个请求，状态还会互相覆盖
+    if (selectingAll.value) return
+
+    selectingAll.value = true
+    const loadingMsg = ElMessage({
+        message: '正在加载本课程的全部文章…',
+        type: 'info',
+        duration: 0
+    })
+    try {
+        // 全选必须是「整门课全选」，不能只选已经滚动加载出来的那部分。
+        // 注意 route.params.id 是字符串，而绑定签名是 number，
+        // 直接把字符串传进去会让参数转换失败、静默走进下面的回退分支，
+        // 表现出来就是「全选只选中已加载的内容」。
+        let all: any[] = []
         try {
-            const allArticles = await ArticleListAll(id.value, '')
-            if (allArticles && allArticles.article_list && allArticles.article_list.length > 0) {
-                selectedArticles.value = [...allArticles.article_list]
-                // 同步更新表格数据，避免重复滚动加载
-                tableData.article_list = allArticles.article_list
-                finished.value = true
-            } else {
-                // 回退：选择当前已加载的
-                selectedArticles.value = [...tableData.article_list]
-            }
+            const allArticles = await ArticleListAll(Number(id.value), '')
+            all = allArticles?.article_list || []
         } catch (e) {
             console.error('ArticleListAll failed:', e)
             if (await handleAuthError(e)) return
-            selectedArticles.value = [...tableData.article_list]
         }
+
+        // 兜底：后端没给全（或调用失败）时，自己分页拉到底
+        if (all.length <= tableData.article_list.length) {
+            try {
+                const paged = await fetchArticlesAllByPaging()
+                if (paged.length > all.length) all = paged
+            } catch (e) {
+                console.error('fetchArticlesAllByPaging failed:', e)
+                if (await handleAuthError(e)) return
+            }
+        }
+
+        if (all.length > 0) {
+            selectedArticles.value = [...all]
+            // 同步表格数据：选中多少就能看到多少，不用再往下滚才加载出来
+            tableData.article_list = all
+            total.value = all.length
+            finished.value = true
+            ElMessage({ message: `已全选 ${all.length} 篇`, type: 'success' })
+        } else {
+            selectedArticles.value = [...tableData.article_list]
+            ElMessage({ message: `只取到已加载的 ${tableData.article_list.length} 篇`, type: 'warning' })
+        }
+    } finally {
+        loadingMsg.close()
+        selectingAll.value = false
     }
 }
 

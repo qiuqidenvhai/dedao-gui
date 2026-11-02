@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/yann0917/dedao-gui/backend/services"
 )
@@ -28,9 +29,48 @@ func ArticleListAll(id int, chapterID string) (list *services.ArticleList, err e
 
 }
 
+// 在途去重：同一门课的「拉全量文章」在并发时只真正发一次请求。
+// 批量下载时 5 个 worker 会同时调用这里，不去重的话每次都要翻 3 页
+// （133 篇 ≈ 3 次请求），白白把接口和内存都拖慢。
+// 这里只共享「正在进行中的那一次」，请求结束立刻从 map 移除并释放引用，
+// 不做常驻缓存，所以不会占额外内存、也不会有数据过期问题。
+type articleAllCall struct {
+	wg   sync.WaitGroup
+	list *services.ArticleList
+	err  error
+}
+
+var (
+	articleAllInflightMu sync.Mutex
+	articleAllInflight   = map[string]*articleAllCall{}
+)
+
 // ArticleListAllByInfo 根据 Enid 和数量获取文章列表
 func ArticleListAllByInfo(enid string, count int, chapterID string) (list *services.ArticleList, err error) {
-	pageSize := 30
+	key := enid + "|" + chapterID
+
+	articleAllInflightMu.Lock()
+	if c, ok := articleAllInflight[key]; ok {
+		articleAllInflightMu.Unlock()
+		c.wg.Wait()
+		return c.list, c.err
+	}
+	c := &articleAllCall{}
+	c.wg.Add(1)
+	articleAllInflight[key] = c
+	articleAllInflightMu.Unlock()
+
+	defer func() {
+		c.list, c.err = list, err
+		articleAllInflightMu.Lock()
+		delete(articleAllInflight, key)
+		articleAllInflightMu.Unlock()
+		c.wg.Done()
+	}()
+
+	// 单页 50 条：得到接口实测 count=50 正常、52 会报 h.c=104000「服务异常」，
+	// 所以 50 是安全上限。133 篇从 5 次请求降到 3 次，返回数据量不变（不额外占内存）。
+	pageSize := 50
 	page := int(math.Ceil(float64(count) / float64(pageSize)))
 	maxID := 0
 	var lists []services.ArticleIntro

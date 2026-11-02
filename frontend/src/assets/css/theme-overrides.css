@@ -336,8 +336,23 @@
 }
 
 /* 输入框适配 */
+/* el-input__wrapper 才是真正承载背景色的外层，只改 .el-input__inner（内层透明）
+   不会让输入框变暗，深色主题下就会露出 Element Plus 的白色默认底。 */
+.theme-dark .el-input__wrapper {
+  background-color: var(--bg-secondary) !important;
+  box-shadow: 0 0 0 1px var(--border-soft) inset !important;
+}
+
+.theme-dark .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--text-secondary) inset !important;
+}
+
+.theme-dark .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--primary-color) inset !important;
+}
+
 .theme-dark .el-input__inner {
-  background-color: var(--card-bg) !important;
+  background-color: transparent !important;
   border-color: var(--border-color) !important;
   color: var(--text-primary) !important;
 }
